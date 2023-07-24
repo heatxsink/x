@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -96,30 +98,6 @@ func (tc TermColor) Render(args ...interface{}) string {
 	return renderCode(tc.String(), args...)
 }
 
-func YesNoPrompt(label string, def bool) bool {
-	choices := "Y/n"
-	if !def {
-		choices = "y/N"
-	}
-	r := bufio.NewReader(os.Stdin)
-	var s string
-	for {
-		fmt.Fprintf(os.Stderr, "%s (%s) ", label, choices)
-		s, _ = r.ReadString('\n')
-		s = strings.TrimSpace(s)
-		if s == "" {
-			return def
-		}
-		s = strings.ToLower(s)
-		if s == "y" || s == "yes" {
-			return true
-		}
-		if s == "n" || s == "no" {
-			return false
-		}
-	}
-}
-
 func Errorln(err error) {
 	FgHiRed.Printf("~~~ %v\n", err)
 }
@@ -181,4 +159,84 @@ func DisplayLn(reader io.Reader, wg *sync.WaitGroup, displayFn func(string)) {
 		Errorln(fmt.Errorf("SCANNER failed to read from reader %s", err))
 	}
 	wg.Done()
+}
+
+func echo(on bool) {
+	// Common settings and variables for both stty calls.
+	attrs := syscall.ProcAttr{
+		Dir:   "",
+		Env:   []string{},
+		Files: []uintptr{os.Stdin.Fd(), os.Stdout.Fd(), os.Stderr.Fd()},
+		Sys:   nil}
+	var ws syscall.WaitStatus
+	cmd := "echo"
+	if on == false {
+		cmd = "-echo"
+	}
+
+	// Enable/disable echoing.
+	pid, err := syscall.ForkExec(
+		"/bin/stty",
+		[]string{"stty", cmd},
+		&attrs)
+	if err != nil {
+		panic(err)
+	}
+
+	// Wait for the stty process to complete.
+	_, err = syscall.Wait4(pid, &ws, 0, nil)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func PasswordPrompt(prompt string) string {
+	fmt.Print(prompt)
+	// Catch a ^C interrupt.
+	// Make sure that we reset term echo before exiting.
+	signalChannel := make(chan os.Signal, 1)
+	signal.Notify(signalChannel, os.Interrupt)
+	go func() {
+		for _ = range signalChannel {
+			fmt.Println("\n^C interrupt.")
+			echo(true)
+			os.Exit(1)
+		}
+	}()
+	// Echo is disabled, now grab the data.
+	echo(false) // disable terminal echo
+	reader := bufio.NewReader(os.Stdin)
+	text, err := reader.ReadString('\n')
+	echo(true) // always re-enable terminal echo
+	fmt.Println("")
+	if err != nil {
+		// The terminal has been reset, go ahead and exit.
+		fmt.Println("ERROR:", err.Error())
+		os.Exit(1)
+	}
+	return strings.TrimSpace(text)
+}
+
+func YesNoPrompt(label string, def bool) bool {
+	choices := "Y/n"
+	if !def {
+		choices = "y/N"
+	}
+	r := bufio.NewReader(os.Stdin)
+	var s string
+	for {
+		fmt.Fprintf(os.Stderr, "%s (%s) ", label, choices)
+		s, _ = r.ReadString('\n')
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return def
+		}
+		s = strings.ToLower(s)
+		if s == "y" || s == "yes" {
+			return true
+		}
+		if s == "n" || s == "no" {
+			return false
+		}
+	}
 }
