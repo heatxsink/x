@@ -1,4 +1,4 @@
-module github.com/heatxsink/experimental
+module github.com/heatxsink/exp
 
 go 1.20
 

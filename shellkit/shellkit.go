@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/heatxsink/experimental/termkit"
+	"github.com/heatxsink/exp/termkit"
 )
 
 func ExecuteWith(env map[string]string, cmd string, args ...string) {
