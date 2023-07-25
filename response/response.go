@@ -5,17 +5,24 @@ import (
 	"net/http"
 )
 
+type Error struct {
+	Message string `json:"message"`
+}
+
 type Response struct {
-	IsError    bool   `json:"is_error"`
-	Message    string `json:"message"`
-	StatusCode int    `json:"status_code"`
-	StatusText string `json:"status_text"`
+	IsError    bool        `json:"is_error"`
+	Error      Error       `json:"error"`
+	StatusCode int         `json:"status_code"`
+	StatusText string      `json:"status_text"`
+	Payload    interface{} `json:"payload"`
 }
 
 func Unauthorized(w http.ResponseWriter, err error) {
 	resp := &Response{
-		IsError:    true,
-		Message:    err.Error(),
+		IsError: true,
+		Error: Error{
+			Message: err.Error(),
+		},
 		StatusCode: http.StatusUnauthorized,
 		StatusText: http.StatusText(http.StatusUnauthorized),
 	}
@@ -24,20 +31,22 @@ func Unauthorized(w http.ResponseWriter, err error) {
 
 func BadRequest(w http.ResponseWriter, err error) {
 	resp := &Response{
-		IsError:    true,
-		Message:    err.Error(),
+		IsError: true,
+		Error: Error{
+			Message: err.Error(),
+		},
 		StatusCode: http.StatusBadRequest,
 		StatusText: http.StatusText(http.StatusBadRequest),
 	}
 	JSON(w, http.StatusBadRequest, &resp)
 }
 
-func OK(w http.ResponseWriter, message string) {
+func OK(w http.ResponseWriter, payload interface{}) {
 	resp := &Response{
 		IsError:    false,
-		Message:    message,
 		StatusCode: http.StatusOK,
 		StatusText: http.StatusText(http.StatusOK),
+		Payload:    payload,
 	}
 	JSON(w, http.StatusOK, &resp)
 }
