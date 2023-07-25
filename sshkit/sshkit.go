@@ -15,50 +15,51 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-type Client struct {
-	host           string
-	port           string
-	user           string
-	password       string
-	privatekeyFile string
-	properties     map[string]string
-	ClientConfig   *ssh.ClientConfig
-	client         *ssh.Client
-	isConnected    bool
+type Config struct {
+	Hostname             string `json:"hostname"`
+	Port                 int    `json:"port"`
+	Username             string `json:"username"`
+	Password             string `json:"password"`
+	PrivateKeyFilename   string `json:"private_key_filename"`
+	PrivateKeyPassphrase string `json:"private_key_passphrase"`
 }
 
-func New(host, port, user, password, keyFile string, keyPassphrase string) (*Client, error) {
-	if password == "" && keyFile == "" {
+type Client struct {
+	config       *Config
+	properties   map[string]string
+	ClientConfig *ssh.ClientConfig
+	client       *ssh.Client
+	isConnected  bool
+}
+
+func New(config *Config) (*Client, error) {
+	if config.Password == "" && config.PrivateKeyFilename == "" {
 		return nil, fmt.Errorf("failed to construct ssh client both password and private key are empty")
 	}
 	var authMethod ssh.AuthMethod
 	var signer ssh.Signer
 	var err error
-	if keyFile != "" && keyPassphrase != "" {
-		signer, err = signerFromKeyFileAndPassphrase(keyFile, keyPassphrase)
+	if config.PrivateKeyFilename != "" && config.PrivateKeyPassphrase != "" {
+		signer, err = signerFromKeyFileAndPassphrase(config.PrivateKeyFilename, config.PrivateKeyPassphrase)
 		if err != nil {
 			return nil, err
 		}
 		authMethod = ssh.PublicKeys(signer)
-	} else if keyFile != "" {
+	} else if config.PrivateKeyFilename != "" {
 		var err error
-		signer, err = signerFromKeyFile(keyFile)
+		signer, err = signerFromKeyFile(config.PrivateKeyFilename)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get public keys from supplied keyfile, %v", err)
 		}
 		authMethod = ssh.PublicKeys(signer)
-	} else if password != "" {
-		authMethod = ssh.Password(password)
+	} else if config.Password != "" {
+		authMethod = ssh.Password(config.Password)
 	}
 	client := &Client{
-		host:           host,
-		port:           port,
-		user:           user,
-		password:       password,
-		properties:     map[string]string{},
-		privatekeyFile: keyFile,
+		config:     config,
+		properties: map[string]string{},
 		ClientConfig: &ssh.ClientConfig{
-			User: user,
+			User: config.Username,
 			Auth: []ssh.AuthMethod{
 				authMethod,
 			},
@@ -92,9 +93,10 @@ func (c *Client) Connect() error {
 	if c.isConnected {
 		return nil
 	}
-	client, err := ssh.Dial("tcp", c.host+":"+c.port, c.ClientConfig)
+	addr := fmt.Sprintf("%s:%d", c.config.Hostname, c.config.Port)
+	client, err := ssh.Dial("tcp", addr, c.ClientConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s, %v", c.host, err)
+		return fmt.Errorf("failed to connect to %s, %v", c.config.Hostname, err)
 	}
 	c.client = client
 	c.isConnected = true
@@ -108,7 +110,7 @@ func (c *Client) NewSession() (*ssh.Session, error) {
 	}
 	session, err := c.client.NewSession()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create SSH session for %s, %v", c.host, err)
+		return nil, fmt.Errorf("failed to create SSH session for %s, %v", c.config.Hostname, err)
 	}
 	return session, nil
 }

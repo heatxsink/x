@@ -3,14 +3,11 @@ package sshkit
 import (
 	"testing"
 	"time"
+
+	"github.com/heatxsink/exp/termkit"
 )
 
 var (
-	hostname    = "ssmaster.h.granado.io"
-	port        = "22"
-	username    = "ngranado"
-	password    = "1234"
-	key         = ""
 	command     = "ls -alh /dev/tty"
 	commandFail = "lss -alh /dev/tty"
 	client      *Client
@@ -18,7 +15,15 @@ var (
 
 func TestNew(t *testing.T) {
 	var err error
-	client, err = New(hostname, port, username, password, key, "")
+	c := Config{
+		Hostname:             "ssmaster.h.granado.io",
+		Port:                 22,
+		Username:             "ngranado",
+		Password:             "1234",
+		PrivateKeyFilename:   "",
+		PrivateKeyPassphrase: "",
+	}
+	client, err = New(&c)
 	if err != nil {
 		t.Error(err)
 	}
@@ -35,7 +40,7 @@ func TestExecute(t *testing.T) {
 
 func TestExecuteInteractively(t *testing.T) {
 	err := client.ExecuteInteractively(command, map[string]string{
-		"Password:": password,
+		"Password:": client.config.Password,
 	})
 	if err != nil {
 		t.Error(err)
@@ -51,7 +56,7 @@ func TestExecuteFail(t *testing.T) {
 
 func TestExecuteInteractivelyFail(t *testing.T) {
 	err := client.ExecuteInteractively(commandFail, map[string]string{
-		"Password:": password,
+		"Password:": client.config.Password,
 	})
 	if err != nil {
 		t.Error(err)
@@ -60,7 +65,15 @@ func TestExecuteInteractivelyFail(t *testing.T) {
 
 func TestKeyFail(t *testing.T) {
 	var err error
-	client, err = New(hostname, port, username, password, "./abc", "")
+	c := Config{
+		Hostname:             "ssmaster.h.granado.io",
+		Port:                 22,
+		Username:             "ngranado",
+		Password:             "",
+		PrivateKeyFilename:   "./abc",
+		PrivateKeyPassphrase: "",
+	}
+	client, err = New(&c)
 	if err != nil {
 		t.Error(err)
 	}
@@ -68,7 +81,16 @@ func TestKeyFail(t *testing.T) {
 
 func TestUpload(t *testing.T) {
 	var err error
-	client, err = New("143.198.104.64", "22", "root", "", "/home/ngranado/.ssh/keys/personal/digitalocean", "nick2360")
+	passphrase := termkit.PasswordPrompt("Enter passphrase:")
+	c := Config{
+		Hostname:             "143.198.104.64",
+		Port:                 22,
+		Username:             "root",
+		Password:             "",
+		PrivateKeyFilename:   "/home/ngranado/.ssh/keys/personal/digitalocean",
+		PrivateKeyPassphrase: passphrase,
+	}
+	client, err = New(&c)
 	if err != nil {
 		t.Error(err)
 	}
