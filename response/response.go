@@ -5,38 +5,30 @@ import (
 	"net/http"
 )
 
-type Error struct {
-	Message string `json:"message"`
-}
-
 type Response struct {
-	IsError    bool        `json:"is_error"`
-	Error      Error       `json:"error"`
-	StatusCode int         `json:"status_code"`
-	StatusText string      `json:"status_text"`
-	Payload    interface{} `json:"payload"`
+	IsError      bool        `json:"is_error,omitempty"`
+	ErrorMessage string      `json:"error_message,omitempty"`
+	StatusCode   int         `json:"status_code,omitempty"`
+	StatusText   string      `json:"status_text,omitempty"`
+	Payload      interface{} `json:"payload,omitempty"`
 }
 
 func Unauthorized(w http.ResponseWriter, err error) {
 	resp := &Response{
-		IsError: true,
-		Error: Error{
-			Message: err.Error(),
-		},
-		StatusCode: http.StatusUnauthorized,
-		StatusText: http.StatusText(http.StatusUnauthorized),
+		IsError:      true,
+		ErrorMessage: err.Error(),
+		StatusCode:   http.StatusUnauthorized,
+		StatusText:   http.StatusText(http.StatusUnauthorized),
 	}
 	JSON(w, http.StatusUnauthorized, &resp)
 }
 
 func BadRequest(w http.ResponseWriter, err error) {
 	resp := &Response{
-		IsError: true,
-		Error: Error{
-			Message: err.Error(),
-		},
-		StatusCode: http.StatusBadRequest,
-		StatusText: http.StatusText(http.StatusBadRequest),
+		IsError:      true,
+		ErrorMessage: err.Error(),
+		StatusCode:   http.StatusBadRequest,
+		StatusText:   http.StatusText(http.StatusBadRequest),
 	}
 	JSON(w, http.StatusBadRequest, &resp)
 }
