@@ -10,7 +10,7 @@ type Response struct {
 	ErrorMessage string      `json:"error_message,omitempty"`
 	StatusCode   int         `json:"status_code,omitempty"`
 	StatusText   string      `json:"status_text,omitempty"`
-	Payload      interface{} `json:"payload,omitempty"`
+	Data         interface{} `json:"data,omitempty"`
 }
 
 func Unauthorized(w http.ResponseWriter, err error) {
@@ -33,12 +33,11 @@ func BadRequest(w http.ResponseWriter, err error) {
 	JSON(w, http.StatusBadRequest, &resp)
 }
 
-func OK(w http.ResponseWriter, payload interface{}) {
+func OK(w http.ResponseWriter, object interface{}) {
 	resp := &Response{
-		IsError:    false,
 		StatusCode: http.StatusOK,
 		StatusText: http.StatusText(http.StatusOK),
-		Payload:    payload,
+		Data:       object,
 	}
 	JSON(w, http.StatusOK, &resp)
 }
