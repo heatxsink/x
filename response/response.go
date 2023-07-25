@@ -11,23 +11,31 @@ type Response struct {
 	StatusCode   int    `json:"status_code"`
 }
 
-func JSONUnauthorized(w http.ResponseWriter, r *http.Request, err error) {
+func Unauthorized(w http.ResponseWriter, err error) {
 	resp := &Response{
 		ErrorMessage: err.Error(),
 		StatusCode:   http.StatusUnauthorized,
 	}
-	JSON(w, r, http.StatusUnauthorized, &resp)
+	JSON(w, http.StatusUnauthorized, &resp)
 }
 
-func JSONOK(w http.ResponseWriter, r *http.Request, message string) {
+func BadRequest(w http.ResponseWriter, err error) {
+	resp := &Response{
+		ErrorMessage: err.Error(),
+		StatusCode:   http.StatusBadRequest,
+	}
+	JSON(w, http.StatusBadRequest, &resp)
+}
+
+func OK(w http.ResponseWriter, message string) {
 	resp := &Response{
 		Message:    message,
 		StatusCode: http.StatusOK,
 	}
-	JSON(w, r, http.StatusOK, &resp)
+	JSON(w, http.StatusOK, &resp)
 }
 
-func JSON(w http.ResponseWriter, r *http.Request, httpStatus int, object interface{}) {
+func JSON(w http.ResponseWriter, httpStatus int, object interface{}) {
 	httpBody, _ := json.MarshalIndent(&object, "", "  ")
 	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(httpStatus)
