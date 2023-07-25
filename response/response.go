@@ -6,31 +6,38 @@ import (
 )
 
 type Response struct {
-	ErrorMessage string `json:"error_message"`
-	Message      string `json:"message"`
-	StatusCode   int    `json:"status_code"`
+	IsError    bool   `json:"is_error"`
+	Message    string `json:"message"`
+	StatusCode int    `json:"status_code"`
+	StatusText string `json:"status_text"`
 }
 
 func Unauthorized(w http.ResponseWriter, err error) {
 	resp := &Response{
-		ErrorMessage: err.Error(),
-		StatusCode:   http.StatusUnauthorized,
+		IsError:    true,
+		Message:    err.Error(),
+		StatusCode: http.StatusUnauthorized,
+		StatusText: http.StatusText(http.StatusUnauthorized),
 	}
 	JSON(w, http.StatusUnauthorized, &resp)
 }
 
 func BadRequest(w http.ResponseWriter, err error) {
 	resp := &Response{
-		ErrorMessage: err.Error(),
-		StatusCode:   http.StatusBadRequest,
+		IsError:    true,
+		Message:    err.Error(),
+		StatusCode: http.StatusBadRequest,
+		StatusText: http.StatusText(http.StatusBadRequest),
 	}
 	JSON(w, http.StatusBadRequest, &resp)
 }
 
 func OK(w http.ResponseWriter, message string) {
 	resp := &Response{
+		IsError:    false,
 		Message:    message,
 		StatusCode: http.StatusOK,
+		StatusText: http.StatusText(http.StatusOK),
 	}
 	JSON(w, http.StatusOK, &resp)
 }
