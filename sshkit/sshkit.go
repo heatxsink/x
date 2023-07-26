@@ -16,12 +16,12 @@ import (
 )
 
 type Config struct {
-	Hostname             string `json:"hostname"`
-	Port                 int    `json:"port"`
-	Username             string `json:"username"`
-	Password             string `json:"password"`
-	PrivateKeyFilename   string `json:"private_key_filename"`
-	PrivateKeyPassphrase string `json:"private_key_passphrase"`
+	Hostname             string `json:"hostname,omitempty"`
+	Port                 int    `json:"port,omitempty"`
+	Username             string `json:"username,omitempty"`
+	Password             string `json:"password,omitempty"`
+	PrivateKeyFilename   string `json:"private_key_filename,omitempty"`
+	PrivateKeyPassphrase string `json:"private_key_passphrase,omitempty"`
 }
 
 type Client struct {
