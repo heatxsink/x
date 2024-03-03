@@ -3,22 +3,25 @@ package sshkit
 import (
 	"testing"
 	"time"
-
-	"github.com/heatxsink/exp/termkit"
 )
 
 var (
-	command     = "ls -alh /dev/tty"
-	commandFail = "lss -alh /dev/tty"
-	client      *Client
+	hostname             = "sshkit.t.granado.io"
+	username             = "alfred"
+	port                 = 22
+	privateKeyFilename   = ""
+	privateKeyPassphrase = ""
+	command              = "ls -alh /dev/tty"
+	commandFail          = "lss -alh /dev/tty"
+	client               *Client
 )
 
 func TestNew(t *testing.T) {
 	var err error
 	c := Config{
-		Hostname:             "ssmaster.h.granado.io",
-		Port:                 22,
-		Username:             "ngranado",
+		Hostname:             hostname,
+		Port:                 port,
+		Username:             username,
 		Password:             "1234",
 		PrivateKeyFilename:   "",
 		PrivateKeyPassphrase: "",
@@ -66,9 +69,9 @@ func TestExecuteInteractivelyFail(t *testing.T) {
 func TestKeyFail(t *testing.T) {
 	var err error
 	c := Config{
-		Hostname:             "ssmaster.h.granado.io",
-		Port:                 22,
-		Username:             "ngranado",
+		Hostname:             hostname,
+		Port:                 port,
+		Username:             username,
 		Password:             "",
 		PrivateKeyFilename:   "./abc",
 		PrivateKeyPassphrase: "",
@@ -81,20 +84,21 @@ func TestKeyFail(t *testing.T) {
 
 func TestUpload(t *testing.T) {
 	var err error
-	passphrase := termkit.PasswordPrompt("Enter passphrase:")
 	c := Config{
-		Hostname:             "143.198.104.64",
-		Port:                 22,
-		Username:             "root",
+		Hostname:             hostname,
+		Port:                 port,
+		Username:             username,
 		Password:             "",
-		PrivateKeyFilename:   "/home/ngranado/.ssh/keys/personal/digitalocean",
-		PrivateKeyPassphrase: passphrase,
+		PrivateKeyFilename:   privateKeyFilename,
+		PrivateKeyPassphrase: privateKeyPassphrase,
 	}
 	client, err = New(&c)
 	if err != nil {
 		t.Error(err)
 	}
-	err = client.Upload("/home/ngranado/go/src/github.com/heatxsink/hwebhookrouter/hwebhookrouter", "/root/hwebhookrouter", "0755", true)
+	srcFilename := "/home/ngranado/go/src/github.com/heatxsink/hwebhookrouter/hwebhookrouter"
+	destFilename := "/opt/hwebhookrouter/bin"
+	err = client.Upload(srcFilename, destFilename, "0755", false)
 	if err != nil {
 		t.Error(err)
 	}

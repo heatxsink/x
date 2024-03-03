@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/heatxsink/exp/gcs"
+	"github.com/heatxsink/x/gcs"
 )
 
 var (
