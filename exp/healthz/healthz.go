@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/heatxsink/exp/response"
+	"github.com/heatxsink/x/exp/response"
 )
 
 type Healthz struct {

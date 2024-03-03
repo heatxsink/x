@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/heatxsink/exp/termkit"
+	"github.com/heatxsink/x/termkit"
 	"golang.org/x/crypto/ssh"
 )
 
