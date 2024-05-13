@@ -9,11 +9,11 @@ import (
 
 type ThrottledTransport struct {
 	roundTripperWrap http.RoundTripper
-	ratelimiter      *rate.Limiter
+	rateLimiter      *rate.Limiter
 }
 
 func (c *ThrottledTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	err := c.ratelimiter.Wait(r.Context()) // This is a blocking call. Honors the rate limit
+	err := c.rateLimiter.Wait(r.Context()) // This is a blocking call. Honors the rate limit
 	if err != nil {
 		return nil, err
 	}
@@ -26,6 +26,6 @@ func (c *ThrottledTransport) RoundTrip(r *http.Request) (*http.Response, error) 
 func NewThrottledTransport(limitPeriod time.Duration, requestCount int, transportWrap http.RoundTripper) http.RoundTripper {
 	return &ThrottledTransport{
 		roundTripperWrap: transportWrap,
-		ratelimiter:      rate.NewLimiter(rate.Every(limitPeriod), requestCount),
+		rateLimiter:      rate.NewLimiter(rate.Every(limitPeriod), requestCount),
 	}
 }
