@@ -42,8 +42,15 @@ func OK(w http.ResponseWriter, object interface{}) {
 	JSON(w, http.StatusOK, &resp)
 }
 
-func JSON(w http.ResponseWriter, httpStatus int, object interface{}) {
+func JSONIndent(w http.ResponseWriter, httpStatus int, object interface{}) {
 	httpBody, _ := json.MarshalIndent(&object, "", "  ")
+	w.Header().Set("content-type", "application/json")
+	w.WriteHeader(httpStatus)
+	w.Write(httpBody)
+}
+
+func JSON(w http.ResponseWriter, httpStatus int, object interface{}) {
+	httpBody, _ := json.Marshal(&object)
 	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(httpStatus)
 	w.Write(httpBody)

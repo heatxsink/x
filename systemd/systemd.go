@@ -27,9 +27,9 @@ type Service struct {
 	Requires        string //
 	User            string // root
 	ExecStart       string // command
-	TimeoutStartSec int    //0
-	Restart         string //always
-	RestartSec      int    //3
+	TimeoutStartSec int    // 0
+	Restart         string // always
+	RestartSec      int    // 3
 }
 
 func NewService(name, execStart string) *Service {
