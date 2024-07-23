@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path"
 	"regexp"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/heatxsink/x/termkit"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 )
 
 type Config struct {
@@ -22,6 +24,7 @@ type Config struct {
 	Password             string `json:"password,omitempty"`
 	PrivateKeyFilename   string `json:"private_key_filename,omitempty"`
 	PrivateKeyPassphrase string `json:"private_key_passphrase,omitempty"`
+	UseAgent             bool   `json:"use_agent,omitempty"`
 }
 
 type Client struct {
@@ -30,6 +33,37 @@ type Client struct {
 	ClientConfig *ssh.ClientConfig
 	client       *ssh.Client
 	isConnected  bool
+	useAgent     bool
+	agentClient  agent.ExtendedAgent
+}
+
+func NewWithAgent(config *Config, debug bool) (*Client, error) {
+	sock, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK"))
+	if err != nil {
+		return nil, err
+	}
+	agentClient := agent.NewClient(sock)
+	if debug {
+		fmt.Println(agentClient.List())
+	}
+	signers, err := agentClient.Signers()
+	if err != nil {
+		return nil, fmt.Errorf("signers error: %v", err)
+	}
+	client := &Client{
+		config:     config,
+		properties: map[string]string{},
+		ClientConfig: &ssh.ClientConfig{
+			User: config.Username,
+			Auth: []ssh.AuthMethod{
+				ssh.PublicKeys(signers...),
+			},
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		},
+		useAgent:    true,
+		agentClient: agentClient,
+	}
+	return client, nil
 }
 
 func New(config *Config) (*Client, error) {
@@ -65,6 +99,7 @@ func New(config *Config) (*Client, error) {
 			},
 			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		},
+		useAgent: false,
 	}
 	return client, nil
 }
@@ -100,6 +135,9 @@ func (c *Client) Connect() error {
 	}
 	c.client = client
 	c.isConnected = true
+	if c.useAgent {
+		agent.ForwardToAgent(client, c.agentClient)
+	}
 	return nil
 }
 
@@ -111,6 +149,9 @@ func (c *Client) NewSession() (*ssh.Session, error) {
 	session, err := c.client.NewSession()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SSH session for %s, %v", c.config.Hostname, err)
+	}
+	if c.useAgent {
+		agent.RequestAgentForwarding(session)
 	}
 	return session, nil
 }
