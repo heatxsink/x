@@ -1,4 +1,4 @@
-package shellkit
+package shell
 
 import (
 	"testing"
