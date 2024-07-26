@@ -1,8 +1,12 @@
 # x
 
-This is a place to keep modules that I've written but not necessarily spin out into their own repositories.
+## Description
 
-Organization of this repository is as follows ...
+This is my `x` repo, there are many others like it but this one is mine.
 
-    - `exp` is experimental and assume all modules are wip
+## Caveats
+
+1. Anything in `exp` is to be considered experimental / wip.
+2. Everything else (not in `exp`) should be considered pretty well thought out and could be relied upon.
+3. PR's are always welcome!
     
