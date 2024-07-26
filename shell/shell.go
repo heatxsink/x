@@ -1,4 +1,4 @@
-package shellkit
+package shell
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/heatxsink/x/termkit"
+	"github.com/heatxsink/x/term"
 )
 
 func ExecuteWith(env map[string]string, cmd string, args ...string) {
@@ -20,7 +20,7 @@ func Execute(cmd string, args ...string) error {
 }
 
 func execute(env map[string]string, command string, args ...string) error {
-	start := termkit.StartlnWithTime(command, args...)
+	start := term.StartlnWithTime(command, args...)
 	c := exec.Command(command, args...)
 	c.Env = os.Environ()
 	for k, v := range env {
@@ -36,20 +36,20 @@ func execute(env map[string]string, command string, args ...string) error {
 	}
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go termkit.DisplayLn(stdout, &wg, func(line string) {
-		termkit.Infoln(line)
+	go term.DisplayLn(stdout, &wg, func(line string) {
+		term.Infoln(line)
 	})
 	wg.Add(1)
-	go termkit.DisplayLn(stderr, &wg, func(line string) {
-		termkit.Warnln(line)
+	go term.DisplayLn(stderr, &wg, func(line string) {
+		term.Warnln(line)
 	})
 	err = c.Run()
 	wg.Wait()
 	if err != nil {
-		termkit.Errorln(err)
-		termkit.EndlnWithTime(time.Since(start), false)
+		term.Errorln(err)
+		term.EndlnWithTime(time.Since(start), false)
 		return err
 	}
-	termkit.EndlnWithTime(time.Since(start), true)
+	term.EndlnWithTime(time.Since(start), true)
 	return nil
 }

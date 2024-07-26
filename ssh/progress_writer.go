@@ -1,4 +1,4 @@
-package sshkit
+package ssh
 
 import (
 	"fmt"

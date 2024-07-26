@@ -1,4 +1,4 @@
-package sshkit
+package ssh
 
 import (
 	"bufio"
@@ -12,32 +12,24 @@ import (
 	"sync"
 	"time"
 
-	"github.com/heatxsink/x/termkit"
+	"github.com/heatxsink/x/term"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
 
-type Config struct {
-	Hostname             string `json:"hostname,omitempty"`
-	Port                 int    `json:"port,omitempty"`
-	Username             string `json:"username,omitempty"`
-	Password             string `json:"password,omitempty"`
-	PrivateKeyFilename   string `json:"private_key_filename,omitempty"`
-	PrivateKeyPassphrase string `json:"private_key_passphrase,omitempty"`
-	UseAgent             bool   `json:"use_agent,omitempty"`
-}
-
 type Client struct {
-	config       *Config
+	hostname     string
+	port         int
 	properties   map[string]string
 	ClientConfig *ssh.ClientConfig
 	client       *ssh.Client
 	isConnected  bool
 	useAgent     bool
 	agentClient  agent.ExtendedAgent
+	debug        bool
 }
 
-func NewWithAgent(config *Config, debug bool) (*Client, error) {
+func NewWithAgent(hostname string, port int, username string, debug bool) (*Client, error) {
 	sock, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK"))
 	if err != nil {
 		return nil, err
@@ -48,13 +40,14 @@ func NewWithAgent(config *Config, debug bool) (*Client, error) {
 	}
 	signers, err := agentClient.Signers()
 	if err != nil {
-		return nil, fmt.Errorf("signers error: %v", err)
+		return nil, err
 	}
 	client := &Client{
-		config:     config,
+		hostname:   hostname,
+		port:       port,
 		properties: map[string]string{},
 		ClientConfig: &ssh.ClientConfig{
-			User: config.Username,
+			User: username,
 			Auth: []ssh.AuthMethod{
 				ssh.PublicKeys(signers...),
 			},
@@ -62,62 +55,65 @@ func NewWithAgent(config *Config, debug bool) (*Client, error) {
 		},
 		useAgent:    true,
 		agentClient: agentClient,
+		debug:       debug,
 	}
 	return client, nil
 }
 
-func New(config *Config) (*Client, error) {
-	if config.Password == "" && config.PrivateKeyFilename == "" {
-		return nil, fmt.Errorf("failed to construct ssh client both password and private key are empty")
-	}
-	var authMethod ssh.AuthMethod
+func NewWithPrivateKey(hostname string, port int, username string, privateKeyFilename string, privateKeyPassphrase string) (*Client, error) {
 	var signer ssh.Signer
-	var err error
-	if config.PrivateKeyFilename != "" && config.PrivateKeyPassphrase != "" {
-		signer, err = signerFromKeyFileAndPassphrase(config.PrivateKeyFilename, config.PrivateKeyPassphrase)
+	if privateKeyPassphrase == "" {
+		pemBytes, err := os.ReadFile(privateKeyFilename)
 		if err != nil {
 			return nil, err
 		}
-		authMethod = ssh.PublicKeys(signer)
-	} else if config.PrivateKeyFilename != "" {
-		var err error
-		signer, err = signerFromKeyFile(config.PrivateKeyFilename)
+		signer, err = ssh.ParsePrivateKey(pemBytes)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get public keys from supplied keyfile, %v", err)
+			return nil, err
 		}
-		authMethod = ssh.PublicKeys(signer)
-	} else if config.Password != "" {
-		authMethod = ssh.Password(config.Password)
+	} else {
+		pemBytes, err := os.ReadFile(privateKeyFilename)
+		if err != nil {
+			return nil, err
+		}
+		signer, err = ssh.ParsePrivateKeyWithPassphrase(pemBytes, []byte(privateKeyPassphrase))
+		if err != nil {
+			return nil, err
+		}
 	}
 	client := &Client{
-		config:     config,
+		hostname:   hostname,
+		port:       port,
 		properties: map[string]string{},
 		ClientConfig: &ssh.ClientConfig{
-			User: config.Username,
+			User: username,
 			Auth: []ssh.AuthMethod{
-				authMethod,
+				ssh.PublicKeys(signer),
 			},
 			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		},
 		useAgent: false,
+		debug:    false,
 	}
 	return client, nil
 }
 
-func signerFromKeyFile(keyfile string) (ssh.Signer, error) {
-	pemBytes, err := os.ReadFile(keyfile)
-	if err != nil {
-		return nil, err
+func NewWithPassword(hostname string, port int, username string, password string) (*Client, error) {
+	client := &Client{
+		hostname:   hostname,
+		port:       port,
+		properties: map[string]string{},
+		ClientConfig: &ssh.ClientConfig{
+			User: username,
+			Auth: []ssh.AuthMethod{
+				ssh.Password(password),
+			},
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		},
+		useAgent: false,
+		debug:    false,
 	}
-	return ssh.ParsePrivateKey(pemBytes)
-}
-
-func signerFromKeyFileAndPassphrase(keyFile string, passphrase string) (ssh.Signer, error) {
-	pemBytes, err := os.ReadFile(keyFile)
-	if err != nil {
-		return nil, err
-	}
-	return ssh.ParsePrivateKeyWithPassphrase(pemBytes, []byte(passphrase))
+	return client, nil
 }
 
 func (c *Client) SetProperty(key, value string) {
@@ -128,10 +124,10 @@ func (c *Client) Connect() error {
 	if c.isConnected {
 		return nil
 	}
-	addr := fmt.Sprintf("%s:%d", c.config.Hostname, c.config.Port)
+	addr := fmt.Sprintf("%s:%d", c.hostname, c.port)
 	client, err := ssh.Dial("tcp", addr, c.ClientConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s, %v", c.config.Hostname, err)
+		return fmt.Errorf("failed to connect to %s, %v", c.hostname, err)
 	}
 	c.client = client
 	c.isConnected = true
@@ -148,7 +144,7 @@ func (c *Client) NewSession() (*ssh.Session, error) {
 	}
 	session, err := c.client.NewSession()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create SSH session for %s, %v", c.config.Hostname, err)
+		return nil, fmt.Errorf("failed to create SSH session for %s, %v", c.hostname, err)
 	}
 	if c.useAgent {
 		agent.RequestAgentForwarding(session)
@@ -196,82 +192,82 @@ func (c *Client) RequestPty(session *ssh.Session) error {
 
 func (c *Client) Execute(command string) error {
 	var wg sync.WaitGroup
-	start := termkit.StartlnWithTime(command)
+	start := term.StartlnWithTime(command)
 	session, err := c.NewSession()
 	if err != nil {
-		termkit.EndlnWithTime(time.Since(start), false)
+		term.EndlnWithTime(time.Since(start), false)
 		return fmt.Errorf("create session: %v", err)
 	}
 	defer session.Close()
 	stdout, err := session.StdoutPipe()
 	if err != nil {
-		termkit.EndlnWithTime(time.Since(start), false)
+		term.EndlnWithTime(time.Since(start), false)
 		return fmt.Errorf("stdout pipe: %v", err)
 	}
 	stderr, err := session.StderrPipe()
 	if err != nil {
-		termkit.EndlnWithTime(time.Since(start), false)
+		term.EndlnWithTime(time.Since(start), false)
 		return fmt.Errorf("stderr pipe: %v", err)
 	}
 	wg.Add(1)
-	go termkit.DisplayLn(stdout, &wg, func(line string) {
-		termkit.Infoln(line)
+	go term.DisplayLn(stdout, &wg, func(line string) {
+		term.Infoln(line)
 	})
 	wg.Add(1)
-	go termkit.DisplayLn(stderr, &wg, func(line string) {
-		termkit.Warnln(line)
+	go term.DisplayLn(stderr, &wg, func(line string) {
+		term.Warnln(line)
 	})
 	err = session.Start(command)
 	if err != nil {
-		termkit.EndlnWithTime(time.Since(start), false)
+		term.EndlnWithTime(time.Since(start), false)
 		return fmt.Errorf("session start: %v", err)
 	}
 	err = session.Wait()
 	if err != nil {
-		termkit.EndlnWithTime(time.Since(start), false)
+		term.EndlnWithTime(time.Since(start), false)
 		return fmt.Errorf("session wait: %v", err)
 	}
 	wg.Wait()
-	termkit.EndlnWithTime(time.Since(start), true)
+	term.EndlnWithTime(time.Since(start), true)
 	return nil
 }
 
 func (c *Client) ExecuteInteractively(command string, inputMap map[string]string) error {
 	var wg sync.WaitGroup
-	start := termkit.StartlnWithTime(command)
+	start := term.StartlnWithTime(command)
 	session, err := c.NewSession()
 	if err != nil {
-		termkit.EndlnWithTime(time.Since(start), false)
+		term.EndlnWithTime(time.Since(start), false)
 		return fmt.Errorf("create session: %v", err)
 	}
 	defer session.Close()
 	err = c.RequestPty(session)
 	if err != nil {
-		termkit.EndlnWithTime(time.Since(start), false)
+		term.EndlnWithTime(time.Since(start), false)
 		return fmt.Errorf("failed to request pty: %v", err)
 	}
 	stdin, err := session.StdinPipe()
 	if err != nil {
-		termkit.EndlnWithTime(time.Since(start), false)
+		term.EndlnWithTime(time.Since(start), false)
 		return fmt.Errorf("stdin pipe: %v", err)
 	}
 	stdout, err := session.StdoutPipe()
 	if err != nil {
-		termkit.EndlnWithTime(time.Since(start), false)
+		term.EndlnWithTime(time.Since(start), false)
 		return fmt.Errorf("stdout pipe: %v", err)
 	}
 	stderr, err := session.StderrPipe()
 	if err != nil {
-		termkit.EndlnWithTime(time.Since(start), false)
+		term.EndlnWithTime(time.Since(start), false)
 		return fmt.Errorf("stderr pipe: %v", err)
 	}
 	wg.Add(1)
-	go termkit.DisplayLn(stderr, &wg, func(line string) {
-		termkit.Warnln(line)
+	go term.DisplayLn(stderr, &wg, func(line string) {
+		term.Warnln(line)
 	})
 	err = session.Start(command)
 	if err != nil {
-		termkit.EndlnWithTime(time.Since(start), false)
+		term.EndlnWithTime(time.Since(start), false)
 		return fmt.Errorf("starting the session: %v", err)
 	}
 	scanner := bufio.NewScanner(stdout)
@@ -282,7 +278,7 @@ func (c *Client) ExecuteInteractively(command string, inputMap map[string]string
 		if b == "\n" {
 			d := strings.Replace(line.String(), "\n", "", -1)
 			d = strings.Replace(d, "\r", "", -1)
-			termkit.Infoln(d)
+			term.Infoln(d)
 			line.Reset()
 		}
 		line.WriteString(b)
@@ -295,15 +291,15 @@ func (c *Client) ExecuteInteractively(command string, inputMap map[string]string
 	}
 	err = scanner.Err()
 	if err != nil {
-		termkit.Errorln(err)
+		term.Errorln(err)
 		return err
 	}
 	err = session.Wait()
 	if err != nil {
-		termkit.EndlnWithTime(time.Since(start), false)
+		term.EndlnWithTime(time.Since(start), false)
 		return fmt.Errorf("session wait: %v", err)
 	}
-	termkit.EndlnWithTime(time.Since(start), true)
+	term.EndlnWithTime(time.Since(start), true)
 	return nil
 }
 
@@ -331,7 +327,7 @@ func (c *Client) uploadByReader(r io.Reader, remotePath string, size int64, perm
 		fmt.Fprintln(w, "C"+permission, size, path.Base(remotePath))
 		_, err := io.Copy(w, teeReader)
 		if err != nil {
-			termkit.Errorln(fmt.Errorf("failed to copy io: %v", err))
+			term.Errorln(fmt.Errorf("failed to copy io: %v", err))
 		}
 		fmt.Fprintln(w, "\x00")
 		p.Stop()

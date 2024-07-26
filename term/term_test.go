@@ -1,4 +1,4 @@
-package termkit
+package term
 
 import (
 	"fmt"
