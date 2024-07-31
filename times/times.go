@@ -3,6 +3,7 @@ package times
 import "time"
 
 var FriendlyShort = "Mon, Jan 02 15:04 MST"
+var FriendlyShortWithYear = "Mon, Jan 02, 2006 at 15:04 MST"
 
 func ConvertToTimezone(timezone string, ts string) (time.Time, error) {
 	var t time.Time
