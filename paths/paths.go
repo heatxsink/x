@@ -1,4 +1,4 @@
-package boilerplate
+package paths
 
 import (
 	"bytes"
@@ -35,7 +35,7 @@ func New(name string) (*Paths, error) {
 	return &p, nil
 }
 
-func (p *Paths) Configuration(c *struct{}) (*struct{}, error) {
+func (p *Paths) LoadConfig(c interface{}) (interface{}, error) {
 	f, err := os.Open(p.Config)
 	if err != nil {
 		return nil, err
