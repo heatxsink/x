@@ -1,4 +1,4 @@
-package boilerplate
+package paths
 
 import (
 	"bytes"
