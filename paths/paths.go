@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"runtime"
 
 	gap "github.com/muesli/go-app-paths"
 	"go.uber.org/zap"
@@ -18,9 +20,40 @@ type Paths struct {
 	Config string
 }
 
+func MkdirFor(name string) error {
+	homePath, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	if runtime.GOOS == "darwin" {
+		logsPath := filepath.Join(homePath, "Library", "Logs", name)
+		err := os.MkdirAll(logsPath, os.ModePerm)
+		if err != nil {
+			return err
+		}
+		configPath := filepath.Join(homePath, "Library", "Preferences", name)
+		err = os.MkdirAll(configPath, os.ModePerm)
+		if err != nil {
+			return err
+		}
+	} else if runtime.GOOS == "linux" {
+		logsPath := filepath.Join(homePath, ".local", "share", name)
+		err := os.MkdirAll(logsPath, os.ModePerm)
+		if err != nil {
+			return err
+		}
+		configPath := filepath.Join(homePath, ".config", name)
+		err = os.MkdirAll(configPath, os.ModePerm)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func New(name string) (*Paths, error) {
-	p := Paths{}
 	var err error
+	p := Paths{}
 	scope := gap.NewScope(gap.User, name)
 	logFilename := fmt.Sprintf("%s.log", name)
 	p.Log, err = scope.LogPath(logFilename)
