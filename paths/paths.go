@@ -35,7 +35,7 @@ func New(name string) (*Paths, error) {
 	return &p, nil
 }
 
-func (p *Paths) LoadConfig(c interface{}) (interface{}, error) {
+func (p *Paths) LoadConfig(c map[interface{}]interface{}) (map[interface{}]interface{}, error) {
 	f, err := os.Open(p.Config)
 	if err != nil {
 		return nil, err
