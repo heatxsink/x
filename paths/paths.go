@@ -1,16 +1,13 @@
 package paths
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"os"
 
 	gap "github.com/muesli/go-app-paths"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
-	"gopkg.in/yaml.v2"
 )
 
 type Paths struct {
@@ -33,23 +30,6 @@ func New(name string) (*Paths, error) {
 		return nil, err
 	}
 	return &p, nil
-}
-
-func (p *Paths) LoadConfig(c map[interface{}]interface{}) (map[interface{}]interface{}, error) {
-	f, err := os.Open(p.Config)
-	if err != nil {
-		return nil, err
-	}
-	buf := bytes.NewBuffer(nil)
-	_, err = io.Copy(buf, f)
-	if err != nil {
-		return nil, err
-	}
-	err = yaml.Unmarshal(buf.Bytes(), &c)
-	if err != nil {
-		return nil, err
-	}
-	return c, nil
 }
 
 func (p *Paths) Logger(fromStdError bool) *zap.Logger {
