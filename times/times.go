@@ -1,6 +1,9 @@
 package times
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 const (
 	FriendlyShort = "Mon, Jan 02 15:04 MST"
@@ -27,4 +30,11 @@ func IsWithinDays(t time.Time, days int) bool {
 		return true
 	}
 	return false
+}
+
+func FilenameTimestamp(t time.Time) string {
+	ts := t.Format(time.RFC3339)
+	tsScrub := strings.Replace(ts, ":", "", -1)
+	tsScrub = strings.Replace(tsScrub, "-", "", -1)
+	return tsScrub
 }
