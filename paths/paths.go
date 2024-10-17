@@ -32,6 +32,22 @@ func New(name string) (*Paths, error) {
 	return &p, nil
 }
 
+func pathCreate(path string) error {
+	fi, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("Path does not exist: ", path)
+		}
+	}
+	if fi.IsDir() {
+		err := os.MkdirAll(path, os.ModePerm)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (p *Paths) Logger(fromStdError bool) *zap.Logger {
 	if fromStdError {
 		return initLoggerToStdErr()
