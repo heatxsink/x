@@ -1,42 +1,17 @@
-package paths
+package logger
 
 import (
-	"fmt"
 	"os"
 
-	gap "github.com/muesli/go-app-paths"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-type Paths struct {
-	Log    string
-	Config string
-}
-
-func New(name string) (*Paths, error) {
-	p := Paths{}
-	var err error
-	scope := gap.NewScope(gap.User, name)
-	logFilename := fmt.Sprintf("%s.log", name)
-	p.Log, err = scope.LogPath(logFilename)
-	if err != nil {
-		return nil, err
-	}
-	configFilename := fmt.Sprintf("%s.yaml", name)
-	p.Config, err = scope.ConfigPath(configFilename)
-	if err != nil {
-		return nil, err
-	}
-	return &p, nil
-}
-
-func (p *Paths) Logger(fromStdError bool) *zap.Logger {
+func Get(filename string, fromStdError bool) *zap.Logger {
 	if fromStdError {
 		return initLoggerToStdErr()
 	}
-	return initLoggerToFile(p.Log)
+	return initLoggerToFile(filename)
 }
 
 func initLoggerToStdErr() *zap.Logger {
