@@ -3,7 +3,7 @@ package ezplug
 import (
 	"fmt"
 
-	"github.com/heatxsink/x/iot"
+	"github.com/heatxsink/x/exp/iot"
 )
 
 var (
