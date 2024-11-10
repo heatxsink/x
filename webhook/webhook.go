@@ -31,13 +31,13 @@ func httpPost(url string, payload []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if response.StatusCode != 200 {
-		return nil, fmt.Errorf("HTTP status code: %d", response.StatusCode)
-	}
 	defer response.Body.Close()
 	content, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, err
+	}
+	if response.StatusCode != 200 {
+		return nil, fmt.Errorf("HTTP status code: %d HTTP body: %s", response.StatusCode, string(content))
 	}
 	return content, nil
 }
