@@ -4,7 +4,6 @@ go 1.22.4
 
 require (
 	cloud.google.com/go/storage v1.46.0
-	github.com/bwmarrin/discordgo v0.28.1
 	github.com/eclipse/paho.mqtt.golang v1.5.0
 	github.com/gosuri/uilive v0.0.4
 	github.com/gregdel/pushover v1.3.1
