@@ -13,31 +13,36 @@ func SendJSON(url string, data interface{}) error {
 	if err != nil {
 		return err
 	}
-	_, err = httpPost(url, b)
+	statusCode, content, err := post(url, b)
 	if err != nil {
 		return err
 	}
-	return err
+	switch statusCode {
+	case 200:
+		return nil
+	case 204:
+		return nil
+	default:
+		return fmt.Errorf("HTTP status code: %d HTTP body: %s", statusCode, string(content))
+	}
 }
 
-func httpPost(url string, payload []byte) ([]byte, error) {
+func post(url string, payload []byte) (int, []byte, error) {
 	request, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
 	if err != nil {
-		return nil, err
+		return -1, nil, err
 	}
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json")
 	client := http.Client{}
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, err
+		return -1, nil, err
 	}
 	defer response.Body.Close()
 	content, err := io.ReadAll(response.Body)
 	if err != nil {
-		return nil, err
+		return -1, nil, err
 	}
-	if response.StatusCode != 200 {
-		return nil, fmt.Errorf("HTTP status code: %d HTTP body: %s", response.StatusCode, string(content))
-	}
-	return content, nil
+	return response.StatusCode, content, nil
 }
