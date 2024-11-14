@@ -15,6 +15,13 @@ func Get(filename string, fromStdError bool) *zap.Logger {
 	return initLoggerToFile(filename)
 }
 
+func GetS(filename string, fromStdError bool) *zap.SugaredLogger {
+	if fromStdError {
+		return initLoggerToStdErr().Sugar()
+	}
+	return initLoggerToFile(filename).Sugar()
+}
+
 func initLoggerToStdErr() *zap.Logger {
 	stderrSyncer := zapcore.Lock(os.Stderr)
 	encoderConfig := zap.NewProductionEncoderConfig()
