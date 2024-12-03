@@ -28,10 +28,10 @@ func TestDoRequest(t *testing.T) {
 		Transport: transport,
 		Timeout:   10 * time.Second,
 	}
-	tracer, err := DoRequest(ctx, client, req)
+	tt, err := Do(ctx, client, req)
 	if err != nil {
 		t.Error(err)
 	}
-	defer tracer.HTTPResponse.Body.Close()
-	fmt.Println(tracer.GetResult())
+	defer tt.HTTPResponse.Body.Close()
+	fmt.Println(tt.GetResult())
 }
