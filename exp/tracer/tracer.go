@@ -56,6 +56,7 @@ func (t *Tracer) GetResult() *Result {
 	if t.RequestStart.IsZero() {
 		t.RequestStart = t.Created
 	}
+	fmt.Println(t.BodyReadTime)
 	return &Result{
 		URL:              t.URL,
 		DNSLookup:        t.DNSDoneTime.Sub(t.DNSStartTime),
@@ -91,28 +92,26 @@ func (t *Tracer) GotConn(info httptrace.GotConnInfo) {
 
 type TracerBodyReader struct {
 	io.ReadCloser
-	bodyReadTime *time.Time
+	BodyReadTime time.Time
 }
 
 func (tbr TracerBodyReader) Read(p []byte) (n int, err error) {
-	n, err = tbr.ReadCloser.Read(p)
-	if err != nil {
-		*tbr.bodyReadTime = time.Now()
-	}
-	return
+	tbr.BodyReadTime = time.Now()
+	return tbr.ReadCloser.Read(p)
 }
 
 func DoRequest(ctx context.Context, client *http.Client, req *http.Request) (*Tracer, error) {
-	tracer := New(req.URL.String())
-	htctx := httptrace.WithClientTrace(ctx, tracer.Trace)
+	t := New(req.URL.String())
+	htctx := httptrace.WithClientTrace(ctx, t.Trace)
 	req = req.WithContext(htctx)
 	res, err := client.Do(req)
 	if res != nil {
+		t.BodyReadTime = time.Now()
 		res.Body = TracerBodyReader{
 			ReadCloser:   res.Body,
-			bodyReadTime: &tracer.BodyReadTime,
+			BodyReadTime: t.BodyReadTime,
 		}
 	}
-	tracer.HTTPResponse = res
-	return tracer, err
+	t.HTTPResponse = res
+	return t, err
 }
