@@ -12,7 +12,7 @@ This is my `x` repo, there are many others like it but this one is mine.
 
 ## License
     
-Copyright 2023 Nick Granado <ngranado@gmail.com>
+Copyright 2025 Nick Granado <ngranado@gmail.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
