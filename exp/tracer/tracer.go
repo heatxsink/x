@@ -3,7 +3,6 @@ package tracer
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptrace"
 	"time"
@@ -20,22 +19,6 @@ type Tracer struct {
 	BodyReadTime             time.Time
 	Trace                    *httptrace.ClientTrace
 	HTTPResponse             *http.Response
-}
-
-func New(url string) *Tracer {
-	tracer := &Tracer{
-		URL:     url,
-		Created: time.Now(),
-	}
-	trace := &httptrace.ClientTrace{
-		DNSStart:             tracer.DNSStart,
-		DNSDone:              tracer.DNSDone,
-		ConnectStart:         tracer.ConnectStart,
-		GotConn:              tracer.GotConn,
-		GotFirstResponseByte: tracer.GotFirstResponseByte,
-	}
-	tracer.Trace = trace
-	return tracer
 }
 
 type Result struct {
@@ -56,7 +39,6 @@ func (t *Tracer) GetResult() *Result {
 	if t.RequestStart.IsZero() {
 		t.RequestStart = t.Created
 	}
-	fmt.Println(t.BodyReadTime)
 	return &Result{
 		URL:              t.URL,
 		DNSLookup:        t.DNSDoneTime.Sub(t.DNSStartTime),
@@ -90,28 +72,28 @@ func (t *Tracer) GotConn(info httptrace.GotConnInfo) {
 	t.GotConnTime = time.Now()
 }
 
-type TracerBodyReader struct {
-	io.ReadCloser
-	BodyReadTime time.Time
-}
-
-func (tbr TracerBodyReader) Read(p []byte) (n int, err error) {
-	tbr.BodyReadTime = time.Now()
-	return tbr.ReadCloser.Read(p)
-}
-
-func DoRequest(ctx context.Context, client *http.Client, req *http.Request) (*Tracer, error) {
-	t := New(req.URL.String())
-	htctx := httptrace.WithClientTrace(ctx, t.Trace)
+func Do(ctx context.Context, client *http.Client, req *http.Request) (*Tracer, error) {
+	tt := &Tracer{
+		URL:     req.URL.String(),
+		Created: time.Now(),
+	}
+	trace := &httptrace.ClientTrace{
+		DNSStart:             tt.DNSStart,
+		DNSDone:              tt.DNSDone,
+		ConnectStart:         tt.ConnectStart,
+		GotConn:              tt.GotConn,
+		GotFirstResponseByte: tt.GotFirstResponseByte,
+	}
+	tt.Trace = trace
+	htctx := httptrace.WithClientTrace(ctx, tt.Trace)
 	req = req.WithContext(htctx)
 	res, err := client.Do(req)
-	if res != nil {
-		t.BodyReadTime = time.Now()
-		res.Body = TracerBodyReader{
-			ReadCloser:   res.Body,
-			BodyReadTime: t.BodyReadTime,
-		}
+	if err != nil {
+		return nil, err
 	}
-	t.HTTPResponse = res
-	return t, err
+	if res != nil {
+		tt.BodyReadTime = time.Now()
+	}
+	tt.HTTPResponse = res
+	return tt, err
 }
