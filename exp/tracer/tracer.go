@@ -17,8 +17,7 @@ type Tracer struct {
 	GotConnTime              time.Time
 	GotFirstResponseByteTime time.Time
 	BodyReadTime             time.Time
-	Trace                    *httptrace.ClientTrace
-	HTTPResponse             *http.Response
+	Response                 *http.Response
 }
 
 type Result struct {
@@ -64,15 +63,16 @@ func (t *Tracer) ConnectStart(_, _ string) {
 	}
 }
 
-func (t *Tracer) GotFirstResponseByte() {
-	t.GotFirstResponseByteTime = time.Now()
-}
-
 func (t *Tracer) GotConn(info httptrace.GotConnInfo) {
 	t.GotConnTime = time.Now()
 }
 
+func (t *Tracer) GotFirstResponseByte() {
+	t.GotFirstResponseByteTime = time.Now()
+}
+
 func Do(ctx context.Context, client *http.Client, req *http.Request) (*Tracer, error) {
+	var err error
 	tt := &Tracer{
 		URL:     req.URL.String(),
 		Created: time.Now(),
@@ -84,16 +84,14 @@ func Do(ctx context.Context, client *http.Client, req *http.Request) (*Tracer, e
 		GotConn:              tt.GotConn,
 		GotFirstResponseByte: tt.GotFirstResponseByte,
 	}
-	tt.Trace = trace
-	htctx := httptrace.WithClientTrace(ctx, tt.Trace)
+	htctx := httptrace.WithClientTrace(ctx, trace)
 	req = req.WithContext(htctx)
-	res, err := client.Do(req)
+	tt.Response, err = client.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	if res != nil {
+	if tt.Response != nil {
 		tt.BodyReadTime = time.Now()
 	}
-	tt.HTTPResponse = res
 	return tt, err
 }

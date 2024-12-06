@@ -32,6 +32,6 @@ func TestDoRequest(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	defer tt.HTTPResponse.Body.Close()
+	defer tt.Response.Body.Close()
 	fmt.Println(tt.GetResult())
 }
