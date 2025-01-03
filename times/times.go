@@ -1,6 +1,11 @@
 package times
 
-import "time"
+import (
+	"fmt"
+	"math"
+	"strings"
+	"time"
+)
 
 const (
 	FriendlyShort     = "Mon, Jan 02 15:04 MST"
@@ -30,4 +35,39 @@ func IsWithinDays(utc time.Time, days int) bool {
 		return true
 	}
 	return false
+}
+
+func DateSince(year int, month time.Month, day int, location *time.Location) string {
+	start := time.Date(year, month, day, 0, 0, 0, 0, location)
+	now := time.Now().In(location)
+	since := now.Sub(start)
+	return Humanize(since)
+}
+
+func Humanize(duration time.Duration) string {
+	days := int64(duration.Hours() / 24)
+	hours := int64(math.Mod(duration.Hours(), 24))
+	minutes := int64(math.Mod(duration.Minutes(), 60))
+	seconds := int64(math.Mod(duration.Seconds(), 60))
+	chunks := []struct {
+		singularName string
+		amount       int64
+	}{
+		{"day", days},
+		{"hour", hours},
+		{"minute", minutes},
+		{"second", seconds},
+	}
+	parts := []string{}
+	for _, chunk := range chunks {
+		switch chunk.amount {
+		case 0:
+			continue
+		case 1:
+			parts = append(parts, fmt.Sprintf("%d %s", chunk.amount, chunk.singularName))
+		default:
+			parts = append(parts, fmt.Sprintf("%d %ss", chunk.amount, chunk.singularName))
+		}
+	}
+	return strings.Join(parts, " ")
 }
