@@ -1,6 +1,7 @@
 package paths
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -38,4 +39,13 @@ func New(name string) (*Paths, error) {
 		return nil, err
 	}
 	return &p, nil
+}
+
+func (p *Paths) String() string {
+	b := new(bytes.Buffer)
+	b.WriteString("Paths:")
+	fmt.Fprintf(b, "  Log:     %v\n", p.Log)
+	fmt.Fprintf(b, "  Config:  %v\n", p.Config)
+	b.WriteString("\n")
+	return b.String()
 }
