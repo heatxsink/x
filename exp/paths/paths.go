@@ -43,7 +43,7 @@ func New(name string) (*Paths, error) {
 
 func (p *Paths) String() string {
 	b := new(bytes.Buffer)
-	b.WriteString("Paths:")
+	b.WriteString("Paths:  \n")
 	fmt.Fprintf(b, "  Log:     %v\n", p.Log)
 	fmt.Fprintf(b, "  Config:  %v\n", p.Config)
 	b.WriteString("\n")
