@@ -10,8 +10,10 @@ import (
 )
 
 type Paths struct {
-	Log    string
-	Config string
+	LogFilename    string
+	LogPath        string
+	ConfigFilename string
+	ConfigPath     string
 }
 
 func New(name string) (*Paths, error) {
@@ -19,22 +21,22 @@ func New(name string) (*Paths, error) {
 	var err error
 	scope := gap.NewScope(gap.User, name)
 	logFilename := fmt.Sprintf("%s.log", name)
-	p.Log, err = scope.LogPath(logFilename)
+	p.LogFilename, err = scope.LogPath(logFilename)
 	if err != nil {
 		return nil, err
 	}
-	lp := filepath.Dir(p.Log)
-	err = os.MkdirAll(lp, os.ModePerm)
+	p.LogPath = filepath.Dir(p.LogFilename)
+	err = os.MkdirAll(p.LogPath, os.ModePerm)
 	if err != nil {
 		return nil, err
 	}
 	configFilename := fmt.Sprintf("%s.yaml", name)
-	p.Config, err = scope.ConfigPath(configFilename)
+	p.ConfigFilename, err = scope.ConfigPath(configFilename)
 	if err != nil {
 		return nil, err
 	}
-	cp := filepath.Dir(p.Config)
-	err = os.MkdirAll(cp, os.ModePerm)
+	p.ConfigPath = filepath.Dir(p.ConfigFilename)
+	err = os.MkdirAll(p.ConfigPath, os.ModePerm)
 	if err != nil {
 		return nil, err
 	}
@@ -44,8 +46,10 @@ func New(name string) (*Paths, error) {
 func (p *Paths) String() string {
 	b := new(bytes.Buffer)
 	b.WriteString("Paths:  \n")
-	fmt.Fprintf(b, "  Log:     %v\n", p.Log)
-	fmt.Fprintf(b, "  Config:  %v\n", p.Config)
+	fmt.Fprintf(b, "  LogFilename:    %v\n", p.LogFilename)
+	fmt.Fprintf(b, "  LogPath:        %v\n", p.LogPath)
+	fmt.Fprintf(b, "  ConfigFilename: %v\n", p.ConfigFilename)
+	fmt.Fprintf(b, "  ConfigPath:     %v\n", p.ConfigPath)
 	b.WriteString("\n")
 	return b.String()
 }
