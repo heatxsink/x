@@ -87,7 +87,6 @@ func New(i *iot.IoT) *WLed {
 
 func (w *WLed) On(topic string) error {
 	return w.iot.Publish(topic, 0, false, On)
-
 }
 
 func (w *WLed) Off(topic string) error {
