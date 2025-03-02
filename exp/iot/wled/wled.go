@@ -167,6 +167,10 @@ func (w *WLed) Color(topic string, value string) error {
 	return w.iot.Publish(topic+"/col", 0, false, value)
 }
 
+func (w *WLed) API(topic string, value string) error {
+	return w.iot.Publish(topic+"/api", 0, false, value)
+}
+
 func (w *WLed) PulseN(topic string, pulse int) error {
 	if err := w.On(topic); err != nil {
 		return err
@@ -182,7 +186,6 @@ func (w *WLed) PulseN(topic string, pulse int) error {
 			}
 		}
 		time.Sleep(1 * time.Second)
-
 	}
 	return nil
 }

@@ -10,7 +10,7 @@ import (
 
 // TODO: Need to make these an env var OR mock?
 var (
-	brokerAddr = "tcp://10.0.13.1:1883"
+	brokerAddr = "tcp://10.0.15.1:1883"
 	username   = "dyoru8xjr89zzydf8kmo"
 	password   = "dqd2a3b1ikdximbe9y5w"
 	clientID   = "wled-tests"
@@ -118,4 +118,27 @@ func reset(sleep bool) error {
 		time.Sleep(5 * time.Second)
 	}
 	return nil
+}
+
+func TestAPI(t *testing.T) {
+	if err := w.API(TopicAll, "FX=0"); err != nil {
+		t.Error(err)
+	}
+	if err := w.Color(TopicAll, "#00FF00"); err != nil {
+		t.Error(err)
+	}
+	time.Sleep(10 * time.Second)
+	if err := w.API(TopicAll, "FX=91&SX=210&IX=128"); err != nil {
+		t.Error(err)
+	}
+	if err := w.Color(TopicAll, "#0000FF"); err != nil {
+		t.Error(err)
+	}
+	time.Sleep(10 * time.Second)
+	if err := w.API(TopicAll, "FX=0"); err != nil {
+		t.Error(err)
+	}
+	if err := w.Color(TopicAll, "#FF0000"); err != nil {
+		t.Error(err)
+	}
 }
