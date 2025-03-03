@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	hostname = "gaz.h.granado.io"
+	hostname = "10.0.15.1"
 	port     = 22
 	username = "pi"
 	password = "1234"
@@ -25,21 +25,6 @@ func TestExecute(t *testing.T) {
 	}
 }
 
-func TestExecuteInteractively(t *testing.T) {
-	client, err := NewWithPassword(hostname, port, username, password)
-	if err != nil {
-		t.Error(err)
-	}
-	client.SetProperty("PubkeyAuthentication", "no")
-	client.ClientConfig.Timeout = 10 * time.Second
-	err = client.ExecuteInteractively("ls -alh /dev/tty", map[string]string{
-		"Password:": password,
-	})
-	if err != nil {
-		t.Error(err)
-	}
-}
-
 func TestUpload(t *testing.T) {
 	srcFilename := "/Users/ngranado/go/src/github.com/heatxsink/hlights/hlights"
 	destFilename := "/home/pi/hlights"
@@ -50,6 +35,21 @@ func TestUpload(t *testing.T) {
 	client.SetProperty("PubkeyAuthentication", "no")
 	client.ClientConfig.Timeout = 10 * time.Second
 	err = client.Upload(srcFilename, destFilename, "0755", false)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestExecuteInteractively(t *testing.T) {
+	client, err := NewWithPassword(hostname, port, username, password)
+	if err != nil {
+		t.Error(err)
+	}
+	client.SetProperty("PubkeyAuthentication", "no")
+	client.ClientConfig.Timeout = 10 * time.Second
+	err = client.ExecuteInteractively("ls -alh /dev/tty", map[string]string{
+		"Password:": password,
+	})
 	if err != nil {
 		t.Error(err)
 	}

@@ -323,14 +323,16 @@ func (c *Client) uploadByReader(r io.Reader, remotePath string, size int64, perm
 		return fmt.Errorf("failed to start session: %v", err)
 	}
 	go func() {
-		pb := progressbar.DefaultBytes(-1, "Uploading")
+		pb := progressbar.DefaultBytes(size, "Uploading")
 		teeReader := io.TeeReader(r, pb)
 		fmt.Fprintln(w, "C"+permission, size, path.Base(remotePath))
-		_, err := io.Copy(w, teeReader)
-		if err != nil {
+		if _, err := io.Copy(w, teeReader); err != nil {
 			term.Errorln(fmt.Errorf("failed to copy io: %v", err))
 		}
 		fmt.Fprintln(w, "\x00")
+		if err = pb.Close(); err != nil {
+			term.Errorln(err)
+		}
 	}()
 	err = session.Wait()
 	if err != nil {
