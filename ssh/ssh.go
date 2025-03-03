@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/heatxsink/x/term"
+	"github.com/schollz/progressbar/v3"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
@@ -322,15 +323,14 @@ func (c *Client) uploadByReader(r io.Reader, remotePath string, size int64, perm
 		return fmt.Errorf("failed to start session: %v", err)
 	}
 	go func() {
-		p := NewProgressWriter(size, "Uploading", "Uploaded")
-		teeReader := io.TeeReader(r, p)
+		pb := progressbar.DefaultBytes(-1, "Uploading")
+		teeReader := io.TeeReader(r, pb)
 		fmt.Fprintln(w, "C"+permission, size, path.Base(remotePath))
 		_, err := io.Copy(w, teeReader)
 		if err != nil {
 			term.Errorln(fmt.Errorf("failed to copy io: %v", err))
 		}
 		fmt.Fprintln(w, "\x00")
-		p.Stop()
 	}()
 	err = session.Wait()
 	if err != nil {
