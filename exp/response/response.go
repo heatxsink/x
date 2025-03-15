@@ -33,6 +33,16 @@ func BadRequest(w http.ResponseWriter, err error) {
 	JSON(w, http.StatusBadRequest, &resp)
 }
 
+func InternalServerError(w http.ResponseWriter, err error) {
+	resp := &Response{
+		IsError:      true,
+		ErrorMessage: err.Error(),
+		StatusCode:   http.StatusInternalServerError,
+		StatusText:   http.StatusText(http.StatusInternalServerError),
+	}
+	JSON(w, http.StatusInternalServerError, &resp)
+}
+
 func OK(w http.ResponseWriter, object interface{}) {
 	resp := &Response{
 		StatusCode: http.StatusOK,
