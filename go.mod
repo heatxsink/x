@@ -7,9 +7,12 @@ toolchain go1.24.1
 require (
 	cloud.google.com/go/storage v1.46.0
 	github.com/eclipse/paho.mqtt.golang v1.5.0
+	github.com/gorilla/handlers v1.5.2
 	github.com/gregdel/pushover v1.3.1
 	github.com/muesli/go-app-paths v0.2.2
+	github.com/rs/cors v1.11.1
 	github.com/schollz/progressbar/v3 v3.18.0
+	github.com/tdewolff/minify/v2 v2.23.1
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.35.0
 	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c
@@ -48,6 +51,7 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/tdewolff/parse/v2 v2.7.23 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.29.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.54.0 // indirect
