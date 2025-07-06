@@ -197,7 +197,7 @@ func PasswordPrompt(prompt string) string {
 	signalChannel := make(chan os.Signal, 1)
 	signal.Notify(signalChannel, os.Interrupt)
 	go func() {
-		for _ = range signalChannel {
+		for range signalChannel {
 			fmt.Println("\n^C interrupt.")
 			echo(true)
 			os.Exit(1)

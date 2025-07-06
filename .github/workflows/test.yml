@@ -1,0 +1,256 @@
+name: Tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch: # Allow manual trigger
+
+env:
+  GO_VERSION: '1.24.x'
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        go-version: ['1.24.x']
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Go ${{ matrix.go-version }}
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+        cache: true
+        
+    - name: Verify dependencies
+      run: go mod verify
+      
+    - name: Download dependencies
+      run: go mod download
+      
+    - name: Run vet
+      run: go vet ./...
+      
+    - name: Run tests
+      run: go test -v -race -timeout=30s ./...
+      
+    - name: Run tests with coverage
+      run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+      
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+        
+    - name: Install Gosec
+      run: go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+        
+    - name: Run Gosec Security Scanner (JSON output)
+      run: |
+        gosec -fmt json -out gosec-results.json ./...
+        echo "Gosec scan completed"
+      continue-on-error: true
+      
+    - name: Run Gosec Security Scanner (SARIF output)
+      run: |
+        gosec -fmt sarif -out gosec-results.sarif ./...
+        echo "SARIF output generated"
+      continue-on-error: true
+      
+    - name: Display Gosec Results
+      run: |
+        if [ -f gosec-results.json ]; then
+          echo "Security scan results:"
+          cat gosec-results.json | jq -r '.Issues[]? | "Issue: \(.rule_id) - \(.details) at \(.file):\(.line)"' || cat gosec-results.json
+        fi
+      continue-on-error: true
+      
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: gosec-results.sarif
+      if: always() && hashFiles('gosec-results.sarif') != ''
+      
+    - name: Upload security scan artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-scan-results
+        path: |
+          gosec-results.json
+          gosec-results.sarif
+      if: always()
+        
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+        
+    - name: Build for ${{ matrix.goos }}/${{ matrix.goarch }}
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        echo "Building for $GOOS/$GOARCH"
+        go build -v ./...
+        
+  test-coverage-report:
+    name: Coverage Report
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+        
+    - name: Run tests with coverage
+      run: |
+        go test -coverprofile=coverage.out -covermode=atomic ./...
+        go tool cover -html=coverage.out -o coverage.html
+        
+    - name: Calculate coverage
+      run: |
+        COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+        echo "Total coverage: ${COVERAGE}%"
+        echo "COVERAGE=${COVERAGE}" >> $GITHUB_ENV
+        
+    - name: Upload coverage artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: |
+          coverage.out
+          coverage.html
+          
+    - name: Comment coverage on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const coverage = process.env.COVERAGE;
+          const comment = `## 📊 Test Coverage Report
+          
+          **Total Coverage:** ${coverage}%
+          
+          Coverage report generated for commit: ${context.sha.substring(0, 7)}
+          
+          📋 [View detailed coverage report in artifacts](${context.payload.pull_request.html_url}/checks)`;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+          
+  test-modules:
+    name: Test Individual Modules
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        module:
+          - "."
+          - "./webhook"
+          - "./exp/logger"
+          - "./exp/config"
+          - "./exp/http/handlers"
+          - "./gravatar"
+          - "./shell"
+          - "./ssh"
+          - "./term"
+          - "./exp/http/tracer"
+      fail-fast: false
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+        
+    - name: Test module ${{ matrix.module }}
+      run: |
+        echo "Testing module: ${{ matrix.module }}"
+        if [ -f "${{ matrix.module }}/go.mod" ]; then
+          cd "${{ matrix.module }}"
+          go mod verify
+          go test -v -race -timeout=30s ./...
+        else
+          go test -v -race -timeout=30s ${{ matrix.module }}
+        fi
+        
+  benchmark:
+    name: Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+        
+    - name: Run benchmarks
+      run: |
+        go test -bench=. -benchmem -count=3 ./... | tee benchmark.txt
+        
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: benchmark.txt
