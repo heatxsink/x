@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"crypto/tls"
 	"net"
 	"net/http"
 	"net/url"
@@ -10,16 +11,20 @@ import (
 func Default() *http.Client {
 	transport := &http.Transport{
 		DialContext: (&net.Dialer{
-			Timeout:   5 * time.Second,
+			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,
 		}).DialContext,
-		TLSHandshakeTimeout:   5 * time.Second,
-		ResponseHeaderTimeout: 5 * time.Second,
+		ForceAttemptHTTP2:     false,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 5 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: false},
 	}
 	return &http.Client{
 		Transport: transport,
-		Timeout:   5 * time.Second,
+		Timeout:   10 * time.Second,
 	}
 }
 
@@ -30,13 +35,17 @@ func Proxy(addr string) (*http.Client, error) {
 	}
 	transport := &http.Transport{
 		Proxy: http.ProxyURL(proxyURL),
-		Dial: (&net.Dialer{
-			Timeout:   10 * time.Second,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,
-		}).Dial,
+		}).DialContext,
+		ForceAttemptHTTP2:     false,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 5 * time.Second,
 		ResponseHeaderTimeout: 10 * time.Second,
-		ExpectContinueTimeout: 10 * time.Second,
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: false},
 	}
 	return &http.Client{
 		Transport: transport,
