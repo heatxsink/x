@@ -1,12 +1,34 @@
 package logger
 
 import (
+	"context"
+	"net/http"
 	"os"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
+
+type contextKey string
+
+const loggerKey contextKey = "zap-logger"
+
+func WithLogger(slogger *zap.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), loggerKey, slogger)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+func FromRequest(r *http.Request) *zap.Logger {
+	if logger, ok := r.Context().Value(loggerKey).(*zap.Logger); ok {
+		return logger
+	}
+	return initLoggerToStdErr()
+}
 
 func Get(filename string, fromStdError bool) *zap.Logger {
 	if fromStdError {
@@ -15,11 +37,12 @@ func Get(filename string, fromStdError bool) *zap.Logger {
 	return initLoggerToFile(filename)
 }
 
-func GetS(filename string, fromStdError bool) *zap.SugaredLogger {
-	if fromStdError {
-		return initLoggerToStdErr().Sugar()
-	}
-	return initLoggerToFile(filename).Sugar()
+func File(filename string) *zap.Logger {
+	return initLoggerToFile(filename)
+}
+
+func StdErr() *zap.Logger {
+	return initLoggerToStdErr()
 }
 
 func initLoggerToStdErr() *zap.Logger {
