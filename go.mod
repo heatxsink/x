@@ -5,6 +5,7 @@ go 1.23.0
 toolchain go1.24.1
 
 require (
+	cloud.google.com/go/secretmanager v1.14.1
 	cloud.google.com/go/storage v1.46.0
 	github.com/eclipse/paho.mqtt.golang v1.5.0
 	github.com/gorilla/handlers v1.5.2
