@@ -420,4 +420,3 @@ func TestLoggerLevels(t *testing.T) {
 		t.Error("Expected error message in log file")
 	}
 }
-
