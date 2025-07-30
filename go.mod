@@ -10,6 +10,7 @@ require (
 	github.com/eclipse/paho.mqtt.golang v1.5.0
 	github.com/gorilla/handlers v1.5.2
 	github.com/gregdel/pushover v1.3.1
+	github.com/joho/godotenv v1.5.1
 	github.com/muesli/go-app-paths v0.2.2
 	github.com/rs/cors v1.11.1
 	github.com/schollz/progressbar/v3 v3.18.0
@@ -64,7 +65,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.29.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/oauth2 v0.23.0 // indirect
+	golang.org/x/oauth2 v0.27.0 // indirect
 	golang.org/x/sync v0.12.0 // indirect
 	golang.org/x/sys v0.31.0 // indirect
 	golang.org/x/term v0.30.0 // indirect

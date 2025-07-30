@@ -147,6 +147,51 @@ func myHandler(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
+### `loom/` - Remote Service Deployment
+Automated deployment and management utilities for remote Linux services over SSH.
+
+**Features:**
+- SSH-based remote command execution
+- systemd service management
+- File upload and directory setup
+- Service file generation
+- Support for SSH agent and password authentication
+- Environment-based configuration
+
+**Environment Variables:**
+- `LOOM_SSH_LOGIN`: SSH username
+- `LOOM_SSH_PASSORD`: SSH password (when not using agent)
+- `LOOM_SSH_HOSTNAME`: Target hostname
+- `LOOM_SSH_PORT`: SSH port (defaults to 22)
+- `LOOM_SSH_DESTINATION`: Remote upload destination
+
+**Example:**
+```go
+// Create a new loom instance
+loom, err := loom.New("my-service", true) // use SSH agent
+if err != nil {
+    log.Fatal(err)
+}
+
+// Generate and setup systemd service
+serviceFile, err := loom.ServiceFile("/opt/my-service/bin/my-service")
+if err != nil {
+    log.Fatal(err)
+}
+
+// Deploy the service
+err = loom.Setup(serviceFile)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Control the service
+err = loom.Service("start")
+if err != nil {
+    log.Fatal(err)
+}
+```
+
 ### `manifest/` - Application Manifest
 Application metadata and manifest management utilities.
 
