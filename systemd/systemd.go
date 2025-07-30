@@ -11,7 +11,7 @@ After={{ .After }}
 Requires={{ .Requires }}
 
 [Service]
-user={{ .User }}
+User={{ .User }}
 TimeoutStartSec={{ .TimeoutStartSec }}
 ExecStart={{ .ExecStart }}
 Restart={{ .Restart }}
