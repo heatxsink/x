@@ -30,7 +30,7 @@ func New(serviceName string, useAgent bool) (*Loom, error) {
 		serviceName: serviceName,
 		useAgent:    useAgent,
 		login:       os.Getenv("LOOM_SSH_LOGIN"),
-		password:    os.Getenv("LOOM_SSH_PASSORD"),
+		password:    os.Getenv("LOOM_SSH_PASSWORD"),
 		hostname:    os.Getenv("LOOM_SSH_HOSTNAME"),
 		port:        os.Getenv("LOOM_SSH_PORT"),
 		destination: os.Getenv("LOOM_SSH_DESTINATION"),
