@@ -29,12 +29,15 @@ func TestInit(t *testing.T) {
 	}
 	p, err = New("piggy", path)
 	if err != nil {
-		t.Error(err)
+		t.Skip("Skipping test: config file not available -", err)
 	}
 	fmt.Println(p)
 }
 
 func TestMessage(t *testing.T) {
+	if p == nil {
+		t.Skip("Skipping test: Pushover client not initialized")
+	}
 	message := randSeq(10)
 	err := p.SendMessage(message)
 	if err != nil {
@@ -44,6 +47,9 @@ func TestMessage(t *testing.T) {
 }
 
 func TestGlance(t *testing.T) {
+	if p == nil {
+		t.Skip("Skipping test: Pushover client not initialized")
+	}
 	title := randSeq(8)
 	text := time.Now().Format(time.DateOnly)
 	subText := time.Now().Format(time.TimeOnly)
