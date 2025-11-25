@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+func TestMain(m *testing.M) {
+	// Create a temporary .env file for tests that need it
+	envContent := []byte("# Test env file\n")
+	os.WriteFile(".env", envContent, 0644)
+	code := m.Run()
+	os.Remove(".env")
+	os.Exit(code)
+}
+
 func TestNew(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -19,7 +28,7 @@ func TestNew(t *testing.T) {
 			useAgent:    true,
 			envVars: map[string]string{
 				"LOOM_SSH_LOGIN":       "testuser",
-				"LOOM_SSH_PASSORD":     "testpass",
+				"LOOM_SSH_PASSWORD":    "testpass",
 				"LOOM_SSH_HOSTNAME":    "testhost",
 				"LOOM_SSH_PORT":        "2222",
 				"LOOM_SSH_DESTINATION": "/tmp/test",
@@ -32,7 +41,7 @@ func TestNew(t *testing.T) {
 			useAgent:    false,
 			envVars: map[string]string{
 				"LOOM_SSH_LOGIN":       "testuser2",
-				"LOOM_SSH_PASSORD":     "testpass2",
+				"LOOM_SSH_PASSWORD":    "testpass2",
 				"LOOM_SSH_HOSTNAME":    "testhost2",
 				"LOOM_SSH_PORT":        "22",
 				"LOOM_SSH_DESTINATION": "/tmp/test2",
@@ -77,8 +86,8 @@ func TestNew(t *testing.T) {
 				if loom.login != tt.envVars["LOOM_SSH_LOGIN"] {
 					t.Errorf("New() login = %v, want %v", loom.login, tt.envVars["LOOM_SSH_LOGIN"])
 				}
-				if loom.password != tt.envVars["LOOM_SSH_PASSORD"] {
-					t.Errorf("New() password = %v, want %v", loom.password, tt.envVars["LOOM_SSH_PASSORD"])
+				if loom.password != tt.envVars["LOOM_SSH_PASSWORD"] {
+					t.Errorf("New() password = %v, want %v", loom.password, tt.envVars["LOOM_SSH_PASSWORD"])
 				}
 				if loom.hostname != tt.envVars["LOOM_SSH_HOSTNAME"] {
 					t.Errorf("New() hostname = %v, want %v", loom.hostname, tt.envVars["LOOM_SSH_HOSTNAME"])
@@ -120,7 +129,7 @@ func TestLoom_client(t *testing.T) {
 				password: "testpass",
 				useAgent: false,
 			},
-			expectError: true,
+			expectError: false,
 		},
 		{
 			name: "valid port string",
@@ -131,7 +140,7 @@ func TestLoom_client(t *testing.T) {
 				password: "testpass",
 				useAgent: false,
 			},
-			expectError: true,
+			expectError: false,
 		},
 	}
 

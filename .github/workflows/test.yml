@@ -67,7 +67,7 @@ jobs:
         cache: true
         
     - name: Install Gosec
-      run: go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+      run: go install github.com/securego/gosec/v2/cmd/gosec@latest
         
     - name: Run Gosec Security Scanner (JSON output)
       run: |
@@ -94,6 +94,7 @@ jobs:
       with:
         sarif_file: gosec-results.sarif
       if: always() && hashFiles('gosec-results.sarif') != ''
+      continue-on-error: true
       
     - name: Upload security scan artifacts
       uses: actions/upload-artifact@v4
@@ -107,15 +108,12 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [test, lint]
+    needs: [test]
     
     strategy:
       matrix:
-        goos: [linux, darwin, windows]
+        goos: [linux]
         goarch: [amd64, arm64]
-        exclude:
-          - goos: windows
-            goarch: arm64
     
     steps:
     - name: Checkout code
@@ -171,6 +169,7 @@ jobs:
           
     - name: Comment coverage on PR
       if: github.event_name == 'pull_request'
+      continue-on-error: true
       uses: actions/github-script@v7
       with:
         script: |

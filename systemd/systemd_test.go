@@ -113,7 +113,7 @@ func TestServiceToFileDefaults(t *testing.T) {
 	if !strings.Contains(contentStr, "ExecStart=/usr/bin/test-app") {
 		t.Error("Service file should contain correct ExecStart")
 	}
-	if !strings.Contains(contentStr, "user=root") {
+	if !strings.Contains(contentStr, "User=root") {
 		t.Error("Service file should contain correct user")
 	}
 	if !strings.Contains(contentStr, "Restart=always") {
@@ -171,7 +171,7 @@ func TestServiceToFileCustomValues(t *testing.T) {
 	if !strings.Contains(contentStr, "Requires=postgresql.service") {
 		t.Error("Service file should contain correct Requires")
 	}
-	if !strings.Contains(contentStr, "user=appuser") {
+	if !strings.Contains(contentStr, "User=appuser") {
 		t.Error("Service file should contain correct user")
 	}
 	if !strings.Contains(contentStr, "ExecStart=/opt/app/bin/myapp --config=/etc/myapp.conf") {
@@ -302,8 +302,8 @@ func TestServiceToFileMultipleServices(t *testing.T) {
 
 		contentStr := string(content)
 		expectedUser := services[i].User
-		if !strings.Contains(contentStr, "user="+expectedUser) {
-			t.Errorf("Service file %d should contain user=%s", i, expectedUser)
+		if !strings.Contains(contentStr, "User="+expectedUser) {
+			t.Errorf("Service file %d should contain User=%s", i, expectedUser)
 		}
 	}
 }
