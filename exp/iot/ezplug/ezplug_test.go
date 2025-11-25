@@ -1,6 +1,7 @@
 package ezplug
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -20,6 +21,9 @@ var (
 )
 
 func TestSetup(t *testing.T) {
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+		t.Skip("Skipping test: MQTT broker not available in CI environment")
+	}
 	iotClient = iot.New(brokerAddr, username, password, clientID, false)
 	_, err := iotClient.Connect()
 	if err != nil {
