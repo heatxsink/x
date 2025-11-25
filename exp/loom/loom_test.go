@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+func TestMain(m *testing.M) {
+	// Create a temporary .env file for tests that need it
+	envContent := []byte("# Test env file\n")
+	os.WriteFile(".env", envContent, 0644)
+	code := m.Run()
+	os.Remove(".env")
+	os.Exit(code)
+}
+
 func TestNew(t *testing.T) {
 	tests := []struct {
 		name        string

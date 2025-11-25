@@ -23,13 +23,16 @@ func TestSetup(t *testing.T) {
 	iotClient = iot.New(brokerAddr, username, password, clientID, false)
 	_, err := iotClient.Connect()
 	if err != nil {
-		t.Error(err)
+		t.Skip("Skipping test: MQTT broker not available -", err)
 	}
 	ep = New(iotClient)
 	testTopic = ep.Topic(testEzPlugID)
 }
 
 func TestOnOff(t *testing.T) {
+	if ep == nil {
+		t.Skip("Skipping test: EzPlug client not initialized")
+	}
 	d := time.Second * 5
 	if err := ep.On(testTopic); err != nil {
 		t.Error(err)
@@ -45,6 +48,9 @@ func TestOnOff(t *testing.T) {
 }
 
 func TestToggle(t *testing.T) {
+	if ep == nil {
+		t.Skip("Skipping test: EzPlug client not initialized")
+	}
 	d := time.Second * 5
 	// Turn "On".
 	if err := ep.On(testTopic); err != nil {

@@ -22,12 +22,15 @@ func TestSetup(t *testing.T) {
 	iotClient = iot.New(brokerAddr, username, password, clientID, false)
 	_, err := iotClient.Connect()
 	if err != nil {
-		t.Error(err)
+		t.Skip("Skipping test: MQTT broker not available -", err)
 	}
 	w = New(iotClient)
 }
 
 func TestOnOff(t *testing.T) {
+	if w == nil {
+		t.Skip("Skipping test: WLed client not initialized")
+	}
 	d := time.Second * 5
 	if err := w.On(TopicAll); err != nil {
 		t.Error(err)
@@ -43,6 +46,9 @@ func TestOnOff(t *testing.T) {
 }
 
 func TestToggle(t *testing.T) {
+	if w == nil {
+		t.Skip("Skipping test: WLed client not initialized")
+	}
 	d := time.Second * 5
 	// Turn "On".
 	if err := w.On(TopicAll); err != nil {
@@ -66,6 +72,9 @@ func TestToggle(t *testing.T) {
 }
 
 func TestAllBrightness(t *testing.T) {
+	if w == nil {
+		t.Skip("Skipping test: WLed client not initialized")
+	}
 	reset(true)
 	for i := 10; i <= 255; i = i + 10 {
 		if err := w.Brightness(TopicAll, int64(i)); err != nil {
@@ -77,6 +86,9 @@ func TestAllBrightness(t *testing.T) {
 }
 
 func TestAllColor(t *testing.T) {
+	if w == nil {
+		t.Skip("Skipping test: WLed client not initialized")
+	}
 	presets := []string{
 		"#FC419A",
 		"#FF0000",
@@ -121,6 +133,9 @@ func reset(sleep bool) error {
 }
 
 func TestAPI(t *testing.T) {
+	if w == nil {
+		t.Skip("Skipping test: WLed client not initialized")
+	}
 	if err := w.API(TopicAll, "FX=0"); err != nil {
 		t.Error(err)
 	}
