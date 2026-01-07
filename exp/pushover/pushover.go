@@ -1,9 +1,7 @@
 package pushover
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"os"
 
 	po "github.com/gregdel/pushover"
@@ -18,102 +16,113 @@ type Pushover struct {
 	DeviceName string `yaml:"device_name"`
 }
 
-func load(name string, service string, path string) ([]byte, error) {
+type Option func(*Pushover) error
+
+func load(name, service, path string) ([]byte, error) {
 	filename := fmt.Sprintf("%s/.hnotify.%s.%s.yaml", path, service, name)
-	f, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	buf := bytes.NewBuffer(nil)
-	_, err = io.Copy(buf, f)
-	if err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return os.ReadFile(filename) // #nosec G304 -- path is caller-controlled, not user input
 }
 
-func New(name string, path string) (*Pushover, error) {
-	b, err := load(name, "pushover", path)
-	if err != nil {
-		return nil, err
+func New(name string, opts ...Option) (*Pushover, error) {
+	p := &Pushover{
+		Name:    name,
+		Enabled: true,
 	}
-	var p Pushover
-	err = yaml.Unmarshal(b, &p)
-	if err != nil {
-		return nil, err
+	for _, opt := range opts {
+		if err := opt(p); err != nil {
+			return nil, err
+		}
 	}
-	return &p, nil
+	if p.AppToken == "" || p.UserToken == "" {
+		return nil, fmt.Errorf("pushover: appToken and userToken are required")
+	}
+	return p, nil
 }
 
-func (p *Pushover) SendMessage(message string) error {
-	if p.Enabled {
-		app := po.New(p.AppToken)
-		recipient := po.NewRecipient(p.UserToken)
-		message := po.NewMessage(message)
-		_, err := app.SendMessage(message, recipient)
+func WithConfigFile(path string) Option {
+	return func(p *Pushover) error {
+		b, err := load(p.Name, "pushover", path)
 		if err != nil {
 			return err
 		}
+		return yaml.Unmarshal(b, p)
 	}
-	return nil
 }
 
-func (p *Pushover) SendGlance(title string, text string, subText string, count int, percent int) (*po.Response, error) {
-	var rr *po.Response
-	var err error
-	if p.Enabled {
-		app := po.New(p.AppToken)
-		r := po.NewRecipient(p.UserToken)
-		g := &po.Glance{
-			Title:      po.String(title),
-			Text:       po.String(text),
-			Subtext:    po.String(subText),
-			Count:      po.Int(count),
-			Percent:    po.Int(percent),
-			DeviceName: po.GlancesAllDevices,
-		}
-		rr, err = app.SendGlanceUpdate(g, r)
-		if err != nil {
-			return nil, err
-		}
+func WithTokens(appToken, userToken string) Option {
+	return func(p *Pushover) error {
+		p.AppToken = appToken
+		p.UserToken = userToken
+		return nil
 	}
-	return rr, nil
 }
 
-func (p *Pushover) SendGlanceTextOnly(title string, text string, subText string) (*po.Response, error) {
-	var rr *po.Response
-	var err error
-	if p.Enabled {
-		app := po.New(p.AppToken)
-		r := po.NewRecipient(p.UserToken)
-		g := &po.Glance{
-			Title:      po.String(title),
-			Text:       po.String(text),
-			Subtext:    po.String(subText),
-			DeviceName: po.GlancesAllDevices,
-		}
-		rr, err = app.SendGlanceUpdate(g, r)
-		if err != nil {
-			return nil, err
-		}
+func WithDeviceName(deviceName string) Option {
+	return func(p *Pushover) error {
+		p.DeviceName = deviceName
+		return nil
 	}
-	return rr, nil
+}
+
+func (p *Pushover) SendMessage(message string) error {
+	if !p.Enabled {
+		return nil
+	}
+	app := po.New(p.AppToken)
+	recipient := po.NewRecipient(p.UserToken)
+	msg := po.NewMessage(message)
+	_, err := app.SendMessage(msg, recipient)
+	return err
+}
+
+func (p *Pushover) SendGlance(title, text, subText string, count, percent int) (*po.Response, error) {
+	if !p.Enabled {
+		return nil, nil
+	}
+	app := po.New(p.AppToken)
+	r := po.NewRecipient(p.UserToken)
+	g := &po.Glance{
+		Title:      po.String(title),
+		Text:       po.String(text),
+		Subtext:    po.String(subText),
+		Count:      po.Int(count),
+		Percent:    po.Int(percent),
+		DeviceName: p.glanceDeviceName(),
+	}
+	return app.SendGlanceUpdate(g, r)
+}
+
+func (p *Pushover) SendGlanceTextOnly(title, text, subText string) (*po.Response, error) {
+	if !p.Enabled {
+		return nil, nil
+	}
+	app := po.New(p.AppToken)
+	r := po.NewRecipient(p.UserToken)
+	g := &po.Glance{
+		Title:      po.String(title),
+		Text:       po.String(text),
+		Subtext:    po.String(subText),
+		DeviceName: p.glanceDeviceName(),
+	}
+	return app.SendGlanceUpdate(g, r)
 }
 
 func (p *Pushover) SendGlanceCountOnly(count int) (*po.Response, error) {
-	var rr *po.Response
-	var err error
-	if p.Enabled {
-		app := po.New(p.AppToken)
-		r := po.NewRecipient(p.UserToken)
-		g := &po.Glance{
-			Count:      po.Int(count),
-			DeviceName: po.GlancesAllDevices,
-		}
-		rr, err = app.SendGlanceUpdate(g, r)
-		if err != nil {
-			return nil, err
-		}
+	if !p.Enabled {
+		return nil, nil
 	}
-	return rr, nil
+	app := po.New(p.AppToken)
+	r := po.NewRecipient(p.UserToken)
+	g := &po.Glance{
+		Count:      po.Int(count),
+		DeviceName: p.glanceDeviceName(),
+	}
+	return app.SendGlanceUpdate(g, r)
+}
+
+func (p *Pushover) glanceDeviceName() string {
+	if p.DeviceName != "" {
+		return p.DeviceName
+	}
+	return po.GlancesAllDevices
 }
