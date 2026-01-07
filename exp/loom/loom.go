@@ -89,11 +89,10 @@ func (l *Loom) Service(command string) error {
 func (l *Loom) ServiceFile(execStart string) (string, error) {
 	ss := systemd.NewService(l.serviceName, execStart)
 	filename := fmt.Sprintf("%s.service", l.serviceName)
-	err := ss.ToFile(filename)
-	if err != nil {
+	if err := ss.ToFile(filename); err != nil {
 		return "", err
 	}
-	return filename, err
+	return filename, nil
 }
 
 func (l *Loom) UploadToDestination(filename string) error {
@@ -108,41 +107,22 @@ func (l *Loom) MoveToOptBin() error {
 }
 
 func (l *Loom) Setup(serviceFile string) error {
-	err := l.UploadToDestination(serviceFile)
-	if err != nil {
+	if err := l.UploadToDestination(serviceFile); err != nil {
 		return err
 	}
 	cmd := fmt.Sprintf("sudo mv -f %s/%s /etc/systemd/system/%s", l.destination, serviceFile, serviceFile)
-	err = l.Remote(cmd)
-	if err != nil {
+	if err := l.Remote(cmd); err != nil {
 		return err
 	}
-	cmd = fmt.Sprintf("sudo mkdir -p /opt/%s/bin", l.serviceName)
-	err = l.Remote(cmd)
-	if err != nil {
+	cmd = fmt.Sprintf("sudo mkdir -p /opt/%s/{bin,etc,log}", l.serviceName)
+	if err := l.Remote(cmd); err != nil {
 		return err
 	}
-	cmd = fmt.Sprintf("sudo mkdir -p /opt/%s/etc", l.serviceName)
-	err = l.Remote(cmd)
-	if err != nil {
+	if err := l.UploadToDestination(l.serviceName); err != nil {
 		return err
 	}
-	cmd = fmt.Sprintf("sudo mkdir -p /opt/%s/log", l.serviceName)
-	err = l.Remote(cmd)
-	if err != nil {
+	if err := l.MoveToOptBin(); err != nil {
 		return err
 	}
-	err = l.UploadToDestination(l.serviceName)
-	if err != nil {
-		return err
-	}
-	err = l.MoveToOptBin()
-	if err != nil {
-		return err
-	}
-	err = l.Service("enable")
-	if err != nil {
-		return err
-	}
-	return nil
+	return l.Service("enable")
 }

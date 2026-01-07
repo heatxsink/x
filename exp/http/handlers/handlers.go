@@ -106,13 +106,17 @@ func Blackhole(next http.Handler) http.Handler {
 	})
 }
 
+var defaultMinifier = func() *minify.M {
+	m := minify.New()
+	m.AddFunc("text/html", html.Minify)
+	m.AddFunc("text/css", css.Minify)
+	m.AddFuncRegexp(regexp.MustCompile("^(application|text)/(x-)?(java|ecma)script$"), js.Minify)
+	return m
+}()
+
 func Minify(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		m := minify.New()
-		m.AddFunc("text/html", html.Minify)
-		m.AddFunc("text/css", css.Minify)
-		m.AddFuncRegexp(regexp.MustCompile("^(application|text)/(x-)?(java|ecma)script$"), js.Minify)
-		mw := m.ResponseWriter(w, r)
+		mw := defaultMinifier.ResponseWriter(w, r)
 		defer mw.Close()
 		next.ServeHTTP(mw, r)
 	})

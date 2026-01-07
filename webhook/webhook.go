@@ -69,21 +69,16 @@ func postWithContext(ctx context.Context, client *http.Client, url string, heade
 }
 
 func SendWithContextAndRetry(ctx context.Context, retries int, delay time.Duration, client *http.Client, url string, headers map[string]string, data interface{}) error {
-	var lerr error
-	var err error
+	var errs error
 	for range retries {
-		err = SendWithContext(ctx, client, url, headers, data)
-		if err != nil {
-			lerr = errors.Join(err)
-			time.Sleep(delay)
-			continue
+		err := SendWithContext(ctx, client, url, headers, data)
+		if err == nil {
+			return nil
 		}
-		return nil
+		errs = errors.Join(errs, err)
+		time.Sleep(delay)
 	}
-	if lerr != nil {
-		return lerr
-	}
-	return nil
+	return errs
 }
 
 func SendWithContext(ctx context.Context, client *http.Client, url string, headers map[string]string, data interface{}) error {
