@@ -27,7 +27,7 @@ func TestInit(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	p, err = New("piggy", path)
+	p, err = New("piggy", WithConfigFile(path))
 	if err != nil {
 		t.Skip("Skipping test: config file not available -", err)
 	}
