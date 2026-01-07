@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -26,6 +27,7 @@ type Client struct {
 	client       *ssh.Client
 	isConnected  bool
 	useAgent     bool
+	agentConn    net.Conn
 	agentClient  agent.ExtendedAgent
 	debug        bool
 }
@@ -41,6 +43,7 @@ func NewWithAgent(hostname string, port int, username string, debug bool) (*Clie
 	}
 	signers, err := agentClient.Signers()
 	if err != nil {
+		sock.Close()
 		return nil, err
 	}
 	client := &Client{
@@ -55,34 +58,28 @@ func NewWithAgent(hostname string, port int, username string, debug bool) (*Clie
 			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		},
 		useAgent:    true,
+		agentConn:   sock,
 		agentClient: agentClient,
 		debug:       debug,
 	}
 	return client, nil
 }
 
-func NewWithPrivateKey(hostname string, port int, username string, privateKeyFilename string, privateKeyPassphrase string) (*Client, error) {
+func NewWithPrivateKey(hostname string, port int, username, privateKeyFilename, privateKeyPassphrase string) (*Client, error) {
+	pemBytes, err := os.ReadFile(privateKeyFilename)
+	if err != nil {
+		return nil, err
+	}
 	var signer ssh.Signer
 	if privateKeyPassphrase == "" {
-		pemBytes, err := os.ReadFile(privateKeyFilename)
-		if err != nil {
-			return nil, err
-		}
 		signer, err = ssh.ParsePrivateKey(pemBytes)
-		if err != nil {
-			return nil, err
-		}
 	} else {
-		pemBytes, err := os.ReadFile(privateKeyFilename)
-		if err != nil {
-			return nil, err
-		}
 		signer, err = ssh.ParsePrivateKeyWithPassphrase(pemBytes, []byte(privateKeyPassphrase))
-		if err != nil {
-			return nil, err
-		}
 	}
-	client := &Client{
+	if err != nil {
+		return nil, err
+	}
+	return &Client{
 		hostname:   hostname,
 		port:       port,
 		properties: map[string]string{},
@@ -95,8 +92,7 @@ func NewWithPrivateKey(hostname string, port int, username string, privateKeyFil
 		},
 		useAgent: false,
 		debug:    false,
-	}
-	return client, nil
+	}, nil
 }
 
 func NewWithPassword(hostname string, port int, username string, password string) (*Client, error) {
@@ -154,12 +150,21 @@ func (c *Client) NewSession() (*ssh.Session, error) {
 }
 
 func (c *Client) Close() error {
-	if !c.isConnected {
-		return nil
+	var errs []error
+	if c.isConnected && c.client != nil {
+		if err := c.client.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to close SSH connection: %w", err))
+		}
+		c.isConnected = false
 	}
-	err := c.client.Close()
-	if err != nil {
-		return fmt.Errorf("failed to close SSH connection %v", err)
+	if c.agentConn != nil {
+		if err := c.agentConn.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to close agent connection: %w", err))
+		}
+		c.agentConn = nil
+	}
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 	return nil
 }
@@ -174,8 +179,7 @@ func (c *Client) Capture(command string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to execute: %v", err)
 	}
-	result := strings.TrimSpace(string(out[:]))
-	return result, nil
+	return strings.TrimSpace(string(out)), nil
 }
 
 func (c *Client) RequestPty(session *ssh.Session) error {
@@ -234,6 +238,19 @@ func (c *Client) Execute(command string) error {
 }
 
 func (c *Client) ExecuteInteractively(command string, inputMap map[string]string) error {
+	// Pre-compile regexes outside the scan loop
+	type patternEntry struct {
+		regex *regexp.Regexp
+		text  string
+	}
+	patterns := make([]patternEntry, 0, len(inputMap))
+	for pattern, text := range inputMap {
+		patterns = append(patterns, patternEntry{
+			regex: regexp.MustCompile(pattern),
+			text:  text,
+		})
+	}
+
 	var wg sync.WaitGroup
 	start := term.StartlnWithTime(command)
 	session, err := c.NewSession()
@@ -273,30 +290,27 @@ func (c *Client) ExecuteInteractively(command string, inputMap map[string]string
 	}
 	scanner := bufio.NewScanner(stdout)
 	scanner.Split(bufio.ScanBytes)
+	replacer := strings.NewReplacer("\n", "", "\r", "")
 	var line strings.Builder
 	for scanner.Scan() {
 		b := scanner.Text()
 		if b == "\n" {
-			d := strings.Replace(line.String(), "\n", "", -1)
-			d = strings.Replace(d, "\r", "", -1)
-			term.Infoln(d)
+			term.Infoln(replacer.Replace(line.String()))
 			line.Reset()
 		}
 		line.WriteString(b)
-		for pattern, text := range inputMap {
-			reg := regexp.MustCompile(pattern)
-			if reg.MatchString(line.String()) {
-				fmt.Fprintln(stdin, text)
+		lineStr := line.String()
+		for _, p := range patterns {
+			if p.regex.MatchString(lineStr) {
+				fmt.Fprintln(stdin, p.text)
 			}
 		}
 	}
-	err = scanner.Err()
-	if err != nil {
+	if err = scanner.Err(); err != nil {
 		term.Errorln(err)
 		return err
 	}
-	err = session.Wait()
-	if err != nil {
+	if err = session.Wait(); err != nil {
 		term.EndlnWithTime(time.Since(start), false)
 		return fmt.Errorf("session wait: %v", err)
 	}

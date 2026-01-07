@@ -1,9 +1,7 @@
 package discord
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"os"
 
 	"github.com/heatxsink/x/webhook"
@@ -36,18 +34,9 @@ type MessageEmbedField struct {
 	Inline bool   `json:"inline,omitempty"`
 }
 
-func load(name string, service string, path string) ([]byte, error) {
+func load(name, service, path string) ([]byte, error) {
 	filename := fmt.Sprintf("%s/.hnotify.%s.%s.yaml", path, service, name)
-	f, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	buf := bytes.NewBuffer(nil)
-	_, err = io.Copy(buf, f)
-	if err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return os.ReadFile(filename)
 }
 
 func New(name string, path string) (*Discord, error) {

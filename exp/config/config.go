@@ -14,6 +14,8 @@ import (
 	"cloud.google.com/go/storage"
 )
 
+// Note: bytes and io are still needed for FromGCS
+
 func FromURI(ctx context.Context, uri string) ([]byte, error) {
 	u, err := url.ParseRequestURI(uri)
 	if err != nil {
@@ -31,16 +33,7 @@ func FromURI(ctx context.Context, uri string) ([]byte, error) {
 }
 
 func FromFile(filename string) ([]byte, error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	buf := bytes.NewBuffer(nil)
-	_, err = io.Copy(buf, f)
-	if err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return os.ReadFile(filename)
 }
 
 func FromGCS(ctx context.Context, bucket string, key string) ([]byte, error) {

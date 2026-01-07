@@ -10,8 +10,8 @@ import (
 	"github.com/heatxsink/x/term"
 )
 
-func ExecuteWith(env map[string]string, cmd string, args ...string) {
-	execute(env, cmd, args...)
+func ExecuteWith(env map[string]string, cmd string, args ...string) error {
+	return execute(env, cmd, args...)
 }
 
 func Execute(cmd string, args ...string) error {

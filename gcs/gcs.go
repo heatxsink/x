@@ -3,7 +3,6 @@ package gcs
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"os"
 
@@ -31,25 +30,23 @@ func Get(ctx context.Context, bucket string, key string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func PutFile(ctx context.Context, bucket string, key string, source string) error {
+func PutFile(ctx context.Context, bucket, key, source string) error {
 	client, err := storage.NewClient(ctx)
 	if err != nil {
 		return err
 	}
-	bh := client.Bucket(bucket)
+	defer client.Close()
 	f, err := os.Open(source)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	o := bh.Object(key)
-	w := o.NewWriter(ctx)
-	_, err = io.Copy(w, f)
-	if err != nil {
+	w := client.Bucket(bucket).Object(key).NewWriter(ctx)
+	if _, err = io.Copy(w, f); err != nil {
+		w.Close()
 		return err
 	}
-	defer w.Close()
-	return nil
+	return w.Close()
 }
 
 func PutBytes(ctx context.Context, bucket string, key string, data []byte, contentType string) error {
@@ -79,22 +76,22 @@ func Delete(ctx context.Context, bucket string, key string) error {
 }
 
 func List(ctx context.Context, bucket string) ([]*storage.ObjectAttrs, error) {
-	iii := make([]*storage.ObjectAttrs, 0)
 	client, err := storage.NewClient(ctx)
 	if err != nil {
-		return iii, err
+		return nil, err
 	}
-	bh := client.Bucket(bucket)
-	ii := bh.Objects(ctx, nil)
+	defer client.Close()
+	var objects []*storage.ObjectAttrs
+	it := client.Bucket(bucket).Objects(ctx, nil)
 	for {
-		attrs, err := ii.Next()
+		attrs, err := it.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			fmt.Println(err)
+			return objects, err
 		}
-		iii = append(iii, attrs)
+		objects = append(objects, attrs)
 	}
-	return iii, nil
+	return objects, nil
 }
