@@ -33,7 +33,7 @@ func FromURI(ctx context.Context, uri string) ([]byte, error) {
 }
 
 func FromFile(filename string) ([]byte, error) {
-	return os.ReadFile(filename)
+	return os.ReadFile(filename) // #nosec G304 -- filename is caller-controlled, not user input
 }
 
 func FromGCS(ctx context.Context, bucket string, key string) ([]byte, error) {

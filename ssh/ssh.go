@@ -43,7 +43,7 @@ func NewWithAgent(hostname string, port int, username string, debug bool) (*Clie
 	}
 	signers, err := agentClient.Signers()
 	if err != nil {
-		sock.Close()
+		_ = sock.Close()
 		return nil, err
 	}
 	client := &Client{
@@ -66,7 +66,7 @@ func NewWithAgent(hostname string, port int, username string, debug bool) (*Clie
 }
 
 func NewWithPrivateKey(hostname string, port int, username, privateKeyFilename, privateKeyPassphrase string) (*Client, error) {
-	pemBytes, err := os.ReadFile(privateKeyFilename)
+	pemBytes, err := os.ReadFile(privateKeyFilename) // #nosec G304 -- privateKeyFilename is caller-controlled
 	if err != nil {
 		return nil, err
 	}

@@ -43,7 +43,7 @@ func PutFile(ctx context.Context, bucket, key, source string) error {
 	defer f.Close()
 	w := client.Bucket(bucket).Object(key).NewWriter(ctx)
 	if _, err = io.Copy(w, f); err != nil {
-		w.Close()
+		_ = w.Close()
 		return err
 	}
 	return w.Close()

@@ -36,7 +36,7 @@ type MessageEmbedField struct {
 
 func load(name, service, path string) ([]byte, error) {
 	filename := fmt.Sprintf("%s/.hnotify.%s.%s.yaml", path, service, name)
-	return os.ReadFile(filename)
+	return os.ReadFile(filename) // #nosec G304 -- path is caller-controlled, not user input
 }
 
 func New(name string, path string) (*Discord, error) {
