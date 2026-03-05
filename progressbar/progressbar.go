@@ -10,11 +10,11 @@ import (
 )
 
 const (
-	defaultWidth    = 40
-	redrawInterval  = 100 * time.Millisecond
-	fillChar        = "="
-	headChar        = ">"
-	emptyChar       = " "
+	defaultWidth   = 40
+	redrawInterval = 100 * time.Millisecond
+	fillChar       = "="
+	headChar       = ">"
+	emptyChar      = " "
 )
 
 type Bar struct {
