@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/heatxsink/x/progressbar"
 	"github.com/heatxsink/x/term"
-	"github.com/schollz/progressbar/v3"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
