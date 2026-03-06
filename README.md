@@ -24,11 +24,70 @@ These modules are work-in-progress and should be considered experimental. Use wi
 
 ## Stable Modules
 
+### `dotenv/` - Environment File Parser
+Zero-dependency `.env` file parser with full feature support.
+
+**Features:**
+- Load, Overload, Read, Parse, Unmarshal, UnmarshalBytes for reading
+- Marshal, Write for serialization
+- Exec for running commands with loaded environment
+- Single/double/backtick quoting with proper escape handling
+- Variable expansion (`$VAR`, `${VAR}`)
+- Export prefix, inline comments, CRLF normalization
+
+**Example:**
+```go
+// Load .env file (does not override existing env vars)
+err := dotenv.Load()
+
+// Load and override existing env vars
+err := dotenv.Overload(".env.local")
+
+// Read into map without modifying os.Environ
+envMap, err := dotenv.Read(".env")
+```
+
 ### `gcs/` - Google Cloud Storage
 Utilities for interacting with Google Cloud Storage buckets and objects.
 
 ### `gravatar/` - Gravatar Integration
-Client for generating Gravatar URLs and fetching user avatars based on email addresses.
+Full Gravatar URL API client with functional options pattern. Supports avatar images, profile URLs (JSON/XML/VCF), and QR codes.
+
+**Features:**
+- `AvatarURL` with configurable size (1-2048px), default image, rating, and force default
+- `ProfileURL` for JSON, XML, and vCard response formats
+- `QRCodeURL` for the v3 QR code endpoint
+- All 8 default image types (`404`, `mp`, `identicon`, `monsterid`, `wavatar`, `retro`, `robohash`, `blank`)
+- SHA256 email hashing per current Gravatar spec
+
+**Example:**
+```go
+url := gravatar.AvatarURL("user@example.com",
+    gravatar.WithSize(200),
+    gravatar.WithDefault(gravatar.DefaultIdenticon),
+    gravatar.WithRating(gravatar.RatingPG),
+)
+
+profileJSON := gravatar.ProfileURL("user@example.com", gravatar.FormatJSON)
+qrCode := gravatar.QRCodeURL("user@example.com")
+```
+
+### `progressbar/` - Progress Bar
+Minimal, zero-dependency terminal progress bar implementing `io.Writer`.
+
+**Features:**
+- `DefaultBytes(total, description)` constructor
+- Implements `io.Writer` for use with `io.TeeReader`, `io.Copy`, etc.
+- Throttled redraws (100ms) to avoid terminal spam
+- Human-readable byte formatting (B, KB, MB, GB)
+
+**Example:**
+```go
+bar := progressbar.DefaultBytes(fileSize, "Uploading")
+teeReader := io.TeeReader(file, bar)
+io.Copy(dst, teeReader)
+bar.Close()
+```
 
 ### `shell/` - Shell Command Execution
 Safe utilities for executing shell commands with proper error handling and output capture.
@@ -47,6 +106,30 @@ Enhanced time and date manipulation utilities beyond the standard library.
 
 ### `webhook/` - HTTP Webhook Client
 HTTP client specifically designed for sending webhook payloads with retry logic, timeouts, and context support.
+
+### `xdg/` - XDG/Platform Path Resolution
+Zero-dependency application path resolver following platform conventions.
+
+**Features:**
+- XDG Base Directory spec compliance on Linux (`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, etc.)
+- macOS `~/Library/` conventions (Preferences, Application Support, Caches, Logs)
+- Windows `%LOCALAPPDATA%` / `%PROGRAMDATA%` support
+- User, System, and CustomHome scope types
+- Vendor prefix support
+- Config, Data, Cache, and Log path resolution
+- File lookup across priority-ordered directories
+
+**Example:**
+```go
+scope := xdg.NewScope(xdg.User, "myapp")
+
+configPath, err := scope.ConfigPath("config.yaml")
+logPath, err := scope.LogPath("app.log")
+cacheDir, err := scope.CacheDir()
+
+// With vendor prefix
+scope := xdg.NewVendorScope(xdg.User, "mycompany", "myapp")
+```
 
 ## Experimental Modules (`exp/`)
 
@@ -91,7 +174,7 @@ Production-ready HTTP middleware including:
 mux := http.NewServeMux()
 mux.HandleFunc("/api", apiHandler)
 
-handler := handlers.Patch(mux, 
+handler := handlers.Patch(mux,
     []string{"https://example.com"}, // allowed origins
     handlers.DefaultAllowedMethods,   // allowed methods
     handlers.DefaultAllowedHeaders,   // allowed headers
@@ -156,11 +239,11 @@ Automated deployment and management utilities for remote Linux services over SSH
 - File upload and directory setup
 - Service file generation
 - Support for SSH agent and password authentication
-- Environment-based configuration
+- Environment-based configuration via `.env` files
 
 **Environment Variables:**
 - `LOOM_SSH_LOGIN`: SSH username
-- `LOOM_SSH_PASSORD`: SSH password (when not using agent)
+- `LOOM_SSH_PASSWORD`: SSH password (when not using agent)
 - `LOOM_SSH_HOSTNAME`: Target hostname
 - `LOOM_SSH_PORT`: SSH port (defaults to 22)
 - `LOOM_SSH_DESTINATION`: Remote upload destination
@@ -196,7 +279,7 @@ if err != nil {
 Application metadata and manifest management utilities.
 
 ### `paths/` - Path Manipulation
-Enhanced path manipulation utilities for file system operations.
+Enhanced path manipulation utilities using the `xdg` module for platform-appropriate config, log, and data paths.
 
 ### `pushover/` - Push Notifications
 Pushover notification service integration for sending push notifications to mobile devices.
@@ -225,6 +308,9 @@ go test -v ./...
 - **Minification**: `tdewolff/minify` for HTML/CSS/JS minification
 - **IoT**: `eclipse/paho.mqtt.golang` for MQTT communication
 - **Notifications**: `gregdel/pushover` for push notifications
+- **YAML**: `gopkg.in/yaml.v3` for configuration file parsing
+
+Notable: `dotenv`, `gravatar`, `progressbar`, and `xdg` are zero-dependency, stdlib-only implementations.
 
 ## Contributing
 
@@ -242,8 +328,8 @@ go test -v ./...
 4. **Pull requests**: PRs are always welcome!
 
 ## License
-    
-Copyright 2025 Nick Granado <ngranado@gmail.com>
+
+Copyright 2026 Nick Granado <ngranado@gmail.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
