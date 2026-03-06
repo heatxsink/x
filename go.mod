@@ -10,7 +10,6 @@ require (
 	github.com/eclipse/paho.mqtt.golang v1.5.0
 	github.com/gorilla/handlers v1.5.2
 	github.com/gregdel/pushover v1.3.1
-	github.com/joho/godotenv v1.5.1
 	github.com/muesli/go-app-paths v0.2.2
 	github.com/rs/cors v1.11.1
 	github.com/tdewolff/minify/v2 v2.23.1
