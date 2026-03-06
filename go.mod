@@ -16,11 +16,10 @@ require (
 	github.com/tdewolff/minify/v2 v2.23.1
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.45.0
-	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c
 	golang.org/x/time v0.7.0
 	google.golang.org/api v0.205.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
-	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
