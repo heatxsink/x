@@ -27,7 +27,9 @@ func Load(filenames ...string) error {
 		}
 		for k, v := range envMap {
 			if _, ok := os.LookupEnv(k); !ok {
-				os.Setenv(k, v)
+				if err := os.Setenv(k, v); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -45,7 +47,9 @@ func Overload(filenames ...string) error {
 			return err
 		}
 		for k, v := range envMap {
-			os.Setenv(k, v)
+			if err := os.Setenv(k, v); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -107,7 +111,7 @@ func Write(envMap map[string]string, filename string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filename, []byte(content), 0644)
+	return os.WriteFile(filename, []byte(content), 0600)
 }
 
 // Exec loads the given .env files into the environment and executes the
@@ -122,7 +126,7 @@ func Exec(filenames []string, cmd string, cmdArgs []string, overload bool) error
 			return err
 		}
 	}
-	command := exec.Command(cmd, cmdArgs...)
+	command := exec.Command(cmd, cmdArgs...) // #nosec G204 -- cmd is caller-controlled, this is the function's purpose
 	command.Stdin = os.Stdin
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
@@ -138,7 +142,7 @@ func defaultFilenames(filenames []string) []string {
 }
 
 func readFile(filename string) (map[string]string, error) {
-	f, err := os.Open(filename)
+	f, err := os.Open(filename) // #nosec G304 -- filename is caller-controlled
 	if err != nil {
 		return nil, err
 	}
