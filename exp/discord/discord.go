@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/heatxsink/x/webhook"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 type Discord struct {

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/exp/rand"
+	"math/rand/v2"
 )
 
 var (
@@ -17,7 +17,7 @@ func randSeq(n int) string {
 	letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	b := make([]rune, n)
 	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
+		b[i] = letters[rand.IntN(len(letters))]
 	}
 	return string(b)
 }
