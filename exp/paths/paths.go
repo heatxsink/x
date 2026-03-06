@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	gap "github.com/muesli/go-app-paths"
+	"github.com/heatxsink/x/xdg"
 )
 
 type Paths struct {
@@ -19,7 +19,7 @@ type Paths struct {
 func New(name string) (*Paths, error) {
 	p := Paths{}
 	var err error
-	scope := gap.NewScope(gap.User, name)
+	scope := xdg.NewScope(xdg.User, name)
 	logFilename := fmt.Sprintf("%s.log", name)
 	p.LogFilename, err = scope.LogPath(logFilename)
 	if err != nil {
