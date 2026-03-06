@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/heatxsink/x/dotenv"
 	"github.com/heatxsink/x/ssh"
 	"github.com/heatxsink/x/systemd"
-	"github.com/joho/godotenv"
 )
 
 type Loom struct {
@@ -22,7 +22,7 @@ type Loom struct {
 }
 
 func New(serviceName string, useAgent bool) (*Loom, error) {
-	err := godotenv.Load()
+	err := dotenv.Load()
 	if err != nil {
 		return nil, err
 	}
