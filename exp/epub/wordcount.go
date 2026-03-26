@@ -17,7 +17,7 @@ func CountWordsAndPages(epubPath string, wordsPerPage int) (words int, pages int
 	if wordsPerPage <= 0 {
 		wordsPerPage = 250
 	}
-	data, err := os.ReadFile(epubPath)
+	data, err := os.ReadFile(epubPath) // #nosec G304 -- path is caller-controlled, not user input
 	if err != nil {
 		return 0, 0, fmt.Errorf("read epub: %w", err)
 	}

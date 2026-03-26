@@ -80,7 +80,7 @@ type dcID struct {
 
 // Parse reads an EPUB file and returns its metadata.
 func Parse(path string) (*Metadata, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is caller-controlled, not user input
 	if err != nil {
 		return nil, err
 	}

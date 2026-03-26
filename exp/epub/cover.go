@@ -17,7 +17,7 @@ func ExtractCover(epubPath string, destPath string, quality int) error {
 	if quality <= 0 {
 		quality = 85
 	}
-	data, err := os.ReadFile(epubPath)
+	data, err := os.ReadFile(epubPath) // #nosec G304 -- path is caller-controlled, not user input
 	if err != nil {
 		return fmt.Errorf("read epub: %w", err)
 	}
@@ -58,7 +58,7 @@ func ExtractCover(epubPath string, destPath string, quality int) error {
 		return fmt.Errorf("decode cover image: %w", err)
 	}
 
-	out, err := os.Create(destPath)
+	out, err := os.Create(destPath) // #nosec G304 -- destPath is caller-controlled, not user input
 	if err != nil {
 		return fmt.Errorf("create dest: %w", err)
 	}
