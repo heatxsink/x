@@ -400,6 +400,129 @@ func TestPatchDebug(t *testing.T) {
 	}
 }
 
+func TestAccessLog(t *testing.T) {
+	core, recorded := observer.New(zapcore.InfoLevel)
+	testLogger := zap.New(core)
+
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte("hello"))
+	})
+
+	handler := logger.WithLogger(testLogger)(AccessLog(inner))
+
+	t.Run("logs method path status bytes duration", func(t *testing.T) {
+		recorded.TakeAll()
+		req := httptest.NewRequest(http.MethodPost, "/api/test", nil)
+		req.Header.Set("User-Agent", "test-agent")
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("Expected status 201, got %d", rec.Code)
+		}
+
+		logs := recorded.All()
+		if len(logs) != 1 {
+			t.Fatalf("Expected 1 log entry, got %d", len(logs))
+		}
+
+		entry := logs[0]
+		if entry.Message != "http" {
+			t.Errorf("Expected message 'http', got %q", entry.Message)
+		}
+
+		fieldMap := entry.ContextMap()
+		if fieldMap["method"] != "POST" {
+			t.Errorf("Expected method POST, got %v", fieldMap["method"])
+		}
+		if fieldMap["path"] != "/api/test" {
+			t.Errorf("Expected path /api/test, got %v", fieldMap["path"])
+		}
+		if fieldMap["status"] != int64(201) {
+			t.Errorf("Expected status 201, got %v", fieldMap["status"])
+		}
+		if fieldMap["bytes"] != int64(5) {
+			t.Errorf("Expected bytes 5, got %v", fieldMap["bytes"])
+		}
+		if fieldMap["ua"] != "test-agent" {
+			t.Errorf("Expected ua test-agent, got %v", fieldMap["ua"])
+		}
+	})
+
+	t.Run("client ip from X-Forwarded-For", func(t *testing.T) {
+		recorded.TakeAll()
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("X-Forwarded-For", "203.0.113.50, 70.41.3.18")
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		logs := recorded.All()
+		if len(logs) != 1 {
+			t.Fatalf("Expected 1 log entry, got %d", len(logs))
+		}
+		if ip := logs[0].ContextMap()["ip"]; ip != "203.0.113.50" {
+			t.Errorf("Expected ip 203.0.113.50, got %v", ip)
+		}
+	})
+
+	t.Run("client ip from X-Real-Ip", func(t *testing.T) {
+		recorded.TakeAll()
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("X-Real-Ip", "10.0.0.1")
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		logs := recorded.All()
+		if len(logs) != 1 {
+			t.Fatalf("Expected 1 log entry, got %d", len(logs))
+		}
+		if ip := logs[0].ContextMap()["ip"]; ip != "10.0.0.1" {
+			t.Errorf("Expected ip 10.0.0.1, got %v", ip)
+		}
+	})
+
+	t.Run("client ip from RemoteAddr", func(t *testing.T) {
+		recorded.TakeAll()
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		logs := recorded.All()
+		if len(logs) != 1 {
+			t.Fatalf("Expected 1 log entry, got %d", len(logs))
+		}
+		ip := logs[0].ContextMap()["ip"]
+		if ip == nil || ip == "" {
+			t.Error("Expected non-empty ip from RemoteAddr")
+		}
+	})
+
+	t.Run("default status 200 when WriteHeader not called", func(t *testing.T) {
+		recorded.TakeAll()
+		noStatusHandler := logger.WithLogger(testLogger)(AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("implicit 200"))
+		})))
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rec := httptest.NewRecorder()
+
+		noStatusHandler.ServeHTTP(rec, req)
+
+		logs := recorded.All()
+		if len(logs) != 1 {
+			t.Fatalf("Expected 1 log entry, got %d", len(logs))
+		}
+		if status := logs[0].ContextMap()["status"]; status != int64(200) {
+			t.Errorf("Expected status 200, got %v", status)
+		}
+	})
+}
+
 func TestDefaultValues(t *testing.T) {
 	if len(DefaultAllowedHeaders) != 1 || DefaultAllowedHeaders[0] != "*" {
 		t.Errorf("Expected DefaultAllowedHeaders to be [\"*\"], got %v", DefaultAllowedHeaders)

@@ -164,9 +164,10 @@ Pre-configured HTTP clients with sensible defaults, timeouts, and proxy support.
 Production-ready HTTP middleware including:
 - **CORS**: Cross-origin resource sharing with configurable policies
 - **Recovery**: Panic recovery with structured logging
+- **AccessLog**: Structured HTTP access logging (method, path, status, bytes, client IP, user-agent, duration)
 - **Compression**: Gzip compression with configurable levels
 - **Minification**: HTML, CSS, and JavaScript minification
-- **Logging**: Request/response logging and tracing
+- **Dump**: Full request dump logging for debugging
 - **Rate Limiting**: Request throttling and rate limiting
 
 **Example:**
@@ -174,6 +175,7 @@ Production-ready HTTP middleware including:
 mux := http.NewServeMux()
 mux.HandleFunc("/api", apiHandler)
 
+// Patch applies: Recover -> AccessLog -> Compress -> Minify -> CORS
 handler := handlers.Patch(mux,
     []string{"https://example.com"}, // allowed origins
     handlers.DefaultAllowedMethods,   // allowed methods
@@ -181,6 +183,9 @@ handler := handlers.Patch(mux,
 )
 
 log.Fatal(http.ListenAndServe(":8080", handler))
+
+// Or use AccessLog standalone
+handler := handlers.AccessLog(myHandler)
 ```
 
 #### `http/healthz/` - Health Check Endpoints
