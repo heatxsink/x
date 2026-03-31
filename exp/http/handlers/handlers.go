@@ -3,10 +3,12 @@ package handlers
 import (
 	"compress/gzip"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/gorilla/handlers"
 	"github.com/heatxsink/x/exp/logger"
@@ -126,10 +128,61 @@ func Compress(next http.Handler) http.Handler {
 	return handlers.CompressHandlerLevel(next, gzip.BestSpeed)
 }
 
+type responseRecorder struct {
+	http.ResponseWriter
+	status int
+	bytes  int
+}
+
+func (r *responseRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *responseRecorder) Write(b []byte) (int, error) {
+	n, err := r.ResponseWriter.Write(b)
+	r.bytes += n
+	return n, err
+}
+
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if ip, _, err := net.SplitHostPort(strings.TrimSpace(strings.Split(xff, ",")[0])); err == nil {
+			return ip
+		}
+		return strings.TrimSpace(strings.Split(xff, ",")[0])
+	}
+	if xri := r.Header.Get("X-Real-Ip"); xri != "" {
+		return xri
+	}
+	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return ip
+	}
+	return r.RemoteAddr
+}
+
+func AccessLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		slogger := logger.FromRequest(r)
+		slogger.Info("http",
+			zap.String("method", r.Method),
+			zap.String("path", r.URL.Path),
+			zap.Int("status", rec.status),
+			zap.Int("bytes", rec.bytes),
+			zap.String("ip", clientIP(r)),
+			zap.String("ua", r.UserAgent()),
+			zap.Duration("duration", time.Since(start)),
+		)
+	})
+}
+
 func Patch(mux *http.ServeMux, allowedOrigins []string, allowedMethods []string, allowedHeaders []string) http.Handler {
-	return Recover(Compress(Minify(CORS(mux, allowedOrigins, allowedMethods, allowedHeaders))))
+	return Recover(AccessLog(Compress(Minify(CORS(mux, allowedOrigins, allowedMethods, allowedHeaders)))))
 }
 
 func PatchDebug(mux *http.ServeMux, allowedOrigins []string) http.Handler {
-	return Recover(Dump(CORS(mux, allowedOrigins, DefaultAllowedMethods, DefaultAllowedHeaders), false))
+	return Recover(AccessLog(Dump(CORS(mux, allowedOrigins, DefaultAllowedMethods, DefaultAllowedHeaders), false)))
 }
