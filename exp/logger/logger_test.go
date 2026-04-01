@@ -201,6 +201,70 @@ func TestWithLogger(t *testing.T) {
 	}
 }
 
+func TestToContext(t *testing.T) {
+	core, recorded := observer.New(zapcore.InfoLevel)
+	testLogger := zap.New(core)
+
+	ctx := ToContext(context.Background(), testLogger)
+
+	logger := FromContext(ctx)
+	logger.Info("round-trip message")
+
+	logs := recorded.All()
+	if len(logs) != 1 {
+		t.Errorf("Expected 1 log entry, got %d", len(logs))
+	}
+	if logs[0].Message != "round-trip message" {
+		t.Errorf("Expected 'round-trip message', got '%s'", logs[0].Message)
+	}
+}
+
+func TestFromContext(t *testing.T) {
+	t.Run("with logger in context", func(t *testing.T) {
+		core, recorded := observer.New(zapcore.InfoLevel)
+		testLogger := zap.New(core)
+
+		ctx := context.WithValue(context.Background(), loggerKey, testLogger)
+
+		logger := FromContext(ctx)
+		if logger == nil {
+			t.Fatal("Expected logger from context, got nil")
+		}
+
+		logger.Info("context message")
+
+		logs := recorded.All()
+		if len(logs) != 1 {
+			t.Errorf("Expected 1 log entry, got %d", len(logs))
+		}
+		if logs[0].Message != "context message" {
+			t.Errorf("Expected 'context message', got '%s'", logs[0].Message)
+		}
+	})
+
+	t.Run("without logger in context", func(t *testing.T) {
+		logger := FromContext(context.Background())
+		if logger == nil {
+			t.Fatal("Expected fallback logger, got nil")
+		}
+		if !logger.Core().Enabled(zapcore.DebugLevel) {
+			t.Error("Expected debug level to be enabled on fallback logger")
+		}
+	})
+
+	t.Run("with wrong type in context", func(t *testing.T) {
+		ctx := context.WithValue(context.Background(), loggerKey, "not a logger")
+
+		logger := FromContext(ctx)
+		if logger == nil {
+			t.Fatal("Expected fallback logger, got nil")
+		}
+		if !logger.Core().Enabled(zapcore.DebugLevel) {
+			t.Error("Expected debug level to be enabled on fallback logger")
+		}
+	})
+}
+
 func TestFromRequest(t *testing.T) {
 	t.Run("with logger in context", func(t *testing.T) {
 		core, recorded := observer.New(zapcore.InfoLevel)
