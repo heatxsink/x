@@ -17,10 +17,14 @@ const loggerKey contextKey = "zap-logger"
 func WithLogger(slogger *zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := context.WithValue(r.Context(), loggerKey, slogger)
+			ctx := ToContext(r.Context(), slogger)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func ToContext(ctx context.Context, l *zap.Logger) context.Context {
+	return context.WithValue(ctx, loggerKey, l)
 }
 
 func FromContext(ctx context.Context) *zap.Logger {
