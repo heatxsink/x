@@ -23,11 +23,15 @@ func WithLogger(slogger *zap.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-func FromRequest(r *http.Request) *zap.Logger {
-	if logger, ok := r.Context().Value(loggerKey).(*zap.Logger); ok {
+func FromContext(ctx context.Context) *zap.Logger {
+	if logger, ok := ctx.Value(loggerKey).(*zap.Logger); ok {
 		return logger
 	}
 	return initLoggerToStdErr()
+}
+
+func FromRequest(r *http.Request) *zap.Logger {
+	return FromContext(r.Context())
 }
 
 func Get(filename string, fromStdError bool) *zap.Logger {
