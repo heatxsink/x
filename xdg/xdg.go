@@ -3,6 +3,7 @@ package xdg
 import (
 	"errors"
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -149,6 +150,22 @@ func lookupFile(dirs []string, filename string) []string {
 	return found
 }
 
+// userHomeDir returns the current user's home directory. It tries
+// os.UserHomeDir first ($HOME), then falls back to os/user.Current
+// which reads /etc/passwd. This ensures correct behavior in environments
+// where $HOME is not set, such as systemd services.
+func userHomeDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err == nil {
+		return home, nil
+	}
+	u, uerr := user.Current()
+	if uerr != nil {
+		return "", err
+	}
+	return u.HomeDir, nil
+}
+
 func homeDir(s *Scope) (string, error) {
 	switch s.Type {
 	case CustomHome:
@@ -157,7 +174,7 @@ func homeDir(s *Scope) (string, error) {
 		}
 		return s.CustomHome, nil
 	case User:
-		return os.UserHomeDir()
+		return userHomeDir()
 	case System:
 		return "", nil
 	}
@@ -217,7 +234,7 @@ func (s *Scope) xdgDir(envKey, userDefault, systemDefault string) (string, error
 				return v, nil
 			}
 		}
-		home, err := os.UserHomeDir()
+		home, err := userHomeDir()
 		if err != nil {
 			return "", err
 		}
@@ -239,7 +256,7 @@ func (s *Scope) xdgDirs(homeEnv, homeDefault, dirsEnv, dirsDefault string) ([]st
 	case User:
 		primary := os.Getenv(homeEnv)
 		if primary == "" {
-			home, err := os.UserHomeDir()
+			home, err := userHomeDir()
 			if err != nil {
 				return nil, err
 			}
@@ -320,7 +337,7 @@ func (s *Scope) windowsBase() (string, error) {
 		if v := os.Getenv("LOCALAPPDATA"); v != "" {
 			return v, nil
 		}
-		home, err := os.UserHomeDir()
+		home, err := userHomeDir()
 		if err != nil {
 			return "", err
 		}
