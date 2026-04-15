@@ -1,6 +1,7 @@
 package loom
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -48,7 +49,10 @@ func (l *Loom) client() (*ssh.Client, error) {
 		}
 	}
 	if l.useAgent {
-		client, err = ssh.NewWithAgent(l.hostname, port, l.login, false)
+		// TODO: Loom's public API does not yet take a context.Context. Until
+		// it does, the agent-socket dial uses an unbounded background ctx and
+		// relies on ClientConfig.Timeout below to bound the SSH dial itself.
+		client, err = ssh.NewWithAgentContext(context.Background(), l.hostname, port, l.login, false)
 		if err != nil {
 			return nil, err
 		}

@@ -115,9 +115,10 @@ func Write(envMap map[string]string, filename string) error {
 	return os.WriteFile(filename, []byte(content), 0600)
 }
 
-// Exec loads the given .env files into the environment and executes the
-// command. If overload is true, existing variables are overridden.
-func Exec(filenames []string, cmd string, cmdArgs []string, overload bool) error {
+// ExecContext loads the given .env files into the environment and executes
+// the command, propagating ctx so the caller can cancel or set a deadline.
+// If overload is true, existing variables are overridden.
+func ExecContext(ctx context.Context, filenames []string, cmd string, cmdArgs []string, overload bool) error {
 	if overload {
 		if err := Overload(filenames...); err != nil {
 			return err
@@ -127,12 +128,20 @@ func Exec(filenames []string, cmd string, cmdArgs []string, overload bool) error
 			return err
 		}
 	}
-	command := exec.CommandContext(context.Background(), cmd, cmdArgs...) // #nosec G204 -- cmd is caller-controlled, this is the function's purpose
+	command := exec.CommandContext(ctx, cmd, cmdArgs...) // #nosec G204 -- cmd is caller-controlled, this is the function's purpose
 	command.Stdin = os.Stdin
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
 	command.Env = os.Environ()
 	return command.Run()
+}
+
+// Exec is a context-less wrapper around ExecContext.
+//
+// Deprecated: use ExecContext, which lets the caller cancel or set a
+// deadline on the spawned process.
+func Exec(filenames []string, cmd string, cmdArgs []string, overload bool) error {
+	return ExecContext(context.Background(), filenames, cmd, cmdArgs, overload)
 }
 
 func defaultFilenames(filenames []string) []string {

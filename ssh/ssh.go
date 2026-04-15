@@ -33,9 +33,11 @@ type Client struct {
 	debug        bool
 }
 
-func NewWithAgent(hostname string, port int, username string, debug bool) (*Client, error) {
+// NewWithAgentContext dials the SSH agent socket under ctx, so the caller
+// can bound how long the dial may take.
+func NewWithAgentContext(ctx context.Context, hostname string, port int, username string, debug bool) (*Client, error) {
 	var d net.Dialer
-	sock, err := d.DialContext(context.Background(), "unix", os.Getenv("SSH_AUTH_SOCK"))
+	sock, err := d.DialContext(ctx, "unix", os.Getenv("SSH_AUTH_SOCK"))
 	if err != nil {
 		return nil, err
 	}
@@ -65,6 +67,14 @@ func NewWithAgent(hostname string, port int, username string, debug bool) (*Clie
 		debug:       debug,
 	}
 	return client, nil
+}
+
+// NewWithAgent is a context-less wrapper around NewWithAgentContext.
+//
+// Deprecated: use NewWithAgentContext, which lets the caller bound the
+// agent-socket dial.
+func NewWithAgent(hostname string, port int, username string, debug bool) (*Client, error) {
+	return NewWithAgentContext(context.Background(), hostname, port, username, debug)
 }
 
 func NewWithPrivateKey(hostname string, port int, username, privateKeyFilename, privateKeyPassphrase string) (*Client, error) {
