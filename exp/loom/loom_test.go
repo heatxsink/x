@@ -146,7 +146,7 @@ func TestLoom_client(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := tt.loom.client()
+			_, err := tt.loom.client(t.Context())
 			if (err != nil) != tt.expectError {
 				t.Errorf("client() error = %v, expectError %v", err, tt.expectError)
 			}
@@ -227,7 +227,7 @@ func TestLoom_UploadToDestination(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.loom.UploadToDestination(tt.filename)
+			err := tt.loom.UploadToDestination(t.Context(), tt.filename)
 			if (err != nil) != tt.expectError {
 				t.Errorf("UploadToDestination() error = %v, expectError %v", err, tt.expectError)
 			}
@@ -244,7 +244,7 @@ func TestLoom_Remote(t *testing.T) {
 		useAgent: false,
 	}
 
-	err := loom.Remote("echo 'test'")
+	err := loom.Remote(t.Context(), "echo 'test'")
 	if err == nil {
 		t.Error("Remote() expected error for nonexistent host, got nil")
 	}
@@ -259,7 +259,7 @@ func TestLoom_Upload(t *testing.T) {
 		useAgent: false,
 	}
 
-	err := loom.Upload("test.txt", "/tmp/test.txt")
+	err := loom.Upload(t.Context(), "test.txt", "/tmp/test.txt")
 	if err == nil {
 		t.Error("Upload() expected error for nonexistent host, got nil")
 	}
@@ -275,7 +275,7 @@ func TestLoom_Service(t *testing.T) {
 		serviceName: "test-service",
 	}
 
-	err := loom.Service("start")
+	err := loom.Service(t.Context(), "start")
 	if err == nil {
 		t.Error("Service() expected error for nonexistent host, got nil")
 	}
@@ -291,7 +291,7 @@ func TestLoom_MoveToOptBin(t *testing.T) {
 		serviceName: "test-service",
 	}
 
-	err := loom.MoveToOptBin()
+	err := loom.MoveToOptBin(t.Context())
 	if err == nil {
 		t.Error("MoveToOptBin() expected error for nonexistent host, got nil")
 	}
@@ -308,7 +308,7 @@ func TestLoom_Setup(t *testing.T) {
 		destination: "/tmp/test",
 	}
 
-	err := loom.Setup("test-service.service")
+	err := loom.Setup(t.Context(), "test-service.service")
 	if err == nil {
 		t.Error("Setup() expected error for nonexistent host, got nil")
 	}
