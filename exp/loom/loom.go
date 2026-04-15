@@ -38,7 +38,7 @@ func New(serviceName string, useAgent bool) (*Loom, error) {
 	}, nil
 }
 
-func (l *Loom) client() (*ssh.Client, error) {
+func (l *Loom) client(ctx context.Context) (*ssh.Client, error) {
 	var client *ssh.Client
 	var err error
 	port := 22
@@ -49,10 +49,7 @@ func (l *Loom) client() (*ssh.Client, error) {
 		}
 	}
 	if l.useAgent {
-		// TODO: Loom's public API does not yet take a context.Context. Until
-		// it does, the agent-socket dial uses an unbounded background ctx and
-		// relies on ClientConfig.Timeout below to bound the SSH dial itself.
-		client, err = ssh.NewWithAgentContext(context.Background(), l.hostname, port, l.login, false)
+		client, err = ssh.NewWithAgentContext(ctx, l.hostname, port, l.login, false)
 		if err != nil {
 			return nil, err
 		}
@@ -67,8 +64,8 @@ func (l *Loom) client() (*ssh.Client, error) {
 	return client, nil
 }
 
-func (l *Loom) Remote(command string) error {
-	client, err := l.client()
+func (l *Loom) Remote(ctx context.Context, command string) error {
+	client, err := l.client(ctx)
 	if err != nil {
 		return err
 	}
@@ -77,17 +74,17 @@ func (l *Loom) Remote(command string) error {
 	})
 }
 
-func (l *Loom) Upload(src, dst string) error {
-	client, err := l.client()
+func (l *Loom) Upload(ctx context.Context, src, dst string) error {
+	client, err := l.client(ctx)
 	if err != nil {
 		return err
 	}
 	return client.Upload(src, dst, "0755", false)
 }
 
-func (l *Loom) Service(command string) error {
+func (l *Loom) Service(ctx context.Context, command string) error {
 	cmd := fmt.Sprintf("sudo systemctl %s %s", command, l.serviceName)
-	return l.Remote(cmd)
+	return l.Remote(ctx, cmd)
 }
 
 func (l *Loom) ServiceFile(execStart string) (string, error) {
@@ -99,34 +96,34 @@ func (l *Loom) ServiceFile(execStart string) (string, error) {
 	return filename, nil
 }
 
-func (l *Loom) UploadToDestination(filename string) error {
+func (l *Loom) UploadToDestination(ctx context.Context, filename string) error {
 	source := fmt.Sprintf("./%s", filename)
 	destination := fmt.Sprintf("%s/%s", l.destination, filename)
-	return l.Upload(source, destination)
+	return l.Upload(ctx, source, destination)
 }
 
-func (l *Loom) MoveToOptBin() error {
+func (l *Loom) MoveToOptBin(ctx context.Context) error {
 	cmd := fmt.Sprintf("sudo mv -f %s /opt/%s/bin/%s", l.serviceName, l.serviceName, l.serviceName)
-	return l.Remote(cmd)
+	return l.Remote(ctx, cmd)
 }
 
-func (l *Loom) Setup(serviceFile string) error {
-	if err := l.UploadToDestination(serviceFile); err != nil {
+func (l *Loom) Setup(ctx context.Context, serviceFile string) error {
+	if err := l.UploadToDestination(ctx, serviceFile); err != nil {
 		return err
 	}
 	cmd := fmt.Sprintf("sudo mv -f %s/%s /etc/systemd/system/%s", l.destination, serviceFile, serviceFile)
-	if err := l.Remote(cmd); err != nil {
+	if err := l.Remote(ctx, cmd); err != nil {
 		return err
 	}
 	cmd = fmt.Sprintf("sudo mkdir -p /opt/%s/{bin,etc,log}", l.serviceName)
-	if err := l.Remote(cmd); err != nil {
+	if err := l.Remote(ctx, cmd); err != nil {
 		return err
 	}
-	if err := l.UploadToDestination(l.serviceName); err != nil {
+	if err := l.UploadToDestination(ctx, l.serviceName); err != nil {
 		return err
 	}
-	if err := l.MoveToOptBin(); err != nil {
+	if err := l.MoveToOptBin(ctx); err != nil {
 		return err
 	}
-	return l.Service("enable")
+	return l.Service(ctx, "enable")
 }
