@@ -38,7 +38,7 @@ func Execute(cmd string, args ...string) error {
 
 func execute(ctx context.Context, env map[string]string, command string, args ...string) error {
 	start := term.StartlnWithTime(command, args...)
-	c := exec.CommandContext(ctx, command, args...)
+	c := exec.CommandContext(ctx, command, args...) // #nosec G204 -- command is caller-controlled, this is the function's purpose
 	c.Env = os.Environ()
 	for k, v := range env {
 		c.Env = append(c.Env, k+"="+v)
