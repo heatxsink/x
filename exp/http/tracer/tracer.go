@@ -86,6 +86,7 @@ func Do(ctx context.Context, client *http.Client, req *http.Request) (*Tracer, e
 	}
 	htctx := httptrace.WithClientTrace(ctx, trace)
 	req = req.WithContext(htctx)
+	// #nosec G704 -- the URL is supplied by the caller; this is a tracing wrapper around their request.
 	tt.Response, err = client.Do(req) //nolint:bodyclose // caller owns tt.Response and is responsible for closing the body.
 	if err != nil {
 		return nil, err
