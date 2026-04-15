@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -33,7 +34,8 @@ type Client struct {
 }
 
 func NewWithAgent(hostname string, port int, username string, debug bool) (*Client, error) {
-	sock, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK"))
+	var d net.Dialer
+	sock, err := d.DialContext(context.Background(), "unix", os.Getenv("SSH_AUTH_SOCK"))
 	if err != nil {
 		return nil, err
 	}

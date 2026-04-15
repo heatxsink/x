@@ -262,12 +262,14 @@ func (s *Scope) xdgDirs(homeEnv, homeDefault, dirsEnv, dirsDefault string) ([]st
 			}
 			primary = filepath.Join(home, homeDefault)
 		}
-		dirs := []string{primary}
 		extra := os.Getenv(dirsEnv)
 		if extra == "" {
 			extra = dirsDefault
 		}
-		dirs = append(dirs, splitPaths(extra)...)
+		extras := splitPaths(extra)
+		dirs := make([]string, 0, 1+len(extras))
+		dirs = append(dirs, primary)
+		dirs = append(dirs, extras...)
 		return dirs, nil
 	case System:
 		extra := os.Getenv(dirsEnv)

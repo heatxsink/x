@@ -2,6 +2,7 @@ package dotenv
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -126,7 +127,7 @@ func Exec(filenames []string, cmd string, cmdArgs []string, overload bool) error
 			return err
 		}
 	}
-	command := exec.Command(cmd, cmdArgs...) // #nosec G204 -- cmd is caller-controlled, this is the function's purpose
+	command := exec.CommandContext(context.Background(), cmd, cmdArgs...) // #nosec G204 -- cmd is caller-controlled, this is the function's purpose
 	command.Stdin = os.Stdin
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr

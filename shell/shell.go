@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -21,7 +22,7 @@ func Execute(cmd string, args ...string) error {
 
 func execute(env map[string]string, command string, args ...string) error {
 	start := term.StartlnWithTime(command, args...)
-	c := exec.Command(command, args...)
+	c := exec.CommandContext(context.Background(), command, args...)
 	c.Env = os.Environ()
 	for k, v := range env {
 		c.Env = append(c.Env, k+"="+v)
