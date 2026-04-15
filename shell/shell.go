@@ -28,11 +28,11 @@ func execute(env map[string]string, command string, args ...string) error {
 	}
 	stdout, err := c.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("failed to get stdout. %v", err)
+		return fmt.Errorf("failed to get stdout. %w", err)
 	}
 	stderr, err := c.StderrPipe()
 	if err != nil {
-		return fmt.Errorf("failed to get stderr: %v", err)
+		return fmt.Errorf("failed to get stderr: %w", err)
 	}
 	var wg sync.WaitGroup
 	wg.Add(1)

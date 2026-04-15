@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -42,7 +40,7 @@ func (v Version) String() string {
 
 func createHash() string {
 	md5 := md5.New()
-	io.WriteString(md5, time.Now().UTC().String())
+	_, _ = io.WriteString(md5, time.Now().UTC().String())
 	return strings.ToUpper(fmt.Sprintf("%x", md5.Sum(nil)))
 }
 
@@ -62,7 +60,7 @@ func New(bucket string, startDate string) *Manifest {
 func (m *Manifest) Init(ctx context.Context) (*Item, []*Item, error) {
 	ii, err := m.Load(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Load() %v", err)
+		return nil, nil, fmt.Errorf("Load() %w", err)
 	}
 	oldMinor := ii[len(ii)-1].Version.Minor
 	point := ii[len(ii)-1].Version.Point + 1
@@ -139,13 +137,11 @@ func (m *Manifest) Clean(ctx context.Context, items []*Item, allowed []string) e
 }
 
 func getPrefixes(items []*Item, allowed []string) []string {
-	var ps []string
+	ps := make([]string, 0, len(items)+len(allowed))
 	for _, i := range items {
 		ps = append(ps, i.Prefix)
 	}
-	for _, i := range allowed {
-		ps = append(ps, i)
-	}
+	ps = append(ps, allowed...)
 	return ps
 }
 
@@ -158,66 +154,3 @@ func stringInSlice(a string, list []string) bool {
 	return false
 }
 
-func copyFile(src, dst string) error {
-	var err error
-	var srcfd *os.File
-	var dstfd *os.File
-	var srcinfo os.FileInfo
-	if srcfd, err = os.Open(src); err != nil {
-		return err
-	}
-	defer srcfd.Close()
-	if dstfd, err = os.Create(dst); err != nil {
-		return err
-	}
-	defer dstfd.Close()
-	if _, err = io.Copy(dstfd, srcfd); err != nil {
-		return err
-	}
-	if srcinfo, err = os.Stat(src); err != nil {
-		return err
-	}
-	return os.Chmod(dst, srcinfo.Mode())
-}
-
-func mkDir(path string) error {
-	err := os.Mkdir(path, 0700)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func deployPath(ctx context.Context, bucket string, path string) error {
-	files, err := getFiles(path)
-	if err != nil {
-		return err
-	}
-	for _, f := range files {
-		k := strings.TrimPrefix(f, "deploy/")
-		err := gcs.PutFile(ctx, bucket, k, f)
-		if err != nil {
-			return fmt.Errorf("gcs.PutFile: %v", err)
-		}
-		fmt.Printf("+")
-	}
-	fmt.Println()
-	return nil
-}
-
-func getFiles(path string) ([]string, error) {
-	files := make([]string, 0)
-	err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			files = append(files, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return files, err
-	}
-	return files, nil
-}

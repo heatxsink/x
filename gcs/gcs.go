@@ -3,6 +3,7 @@ package gcs
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 
@@ -85,7 +86,7 @@ func List(ctx context.Context, bucket string) ([]*storage.ObjectAttrs, error) {
 	it := client.Bucket(bucket).Objects(ctx, nil)
 	for {
 		attrs, err := it.Next()
-		if err == iterator.Done {
+		if errors.Is(err, iterator.Done) {
 			break
 		}
 		if err != nil {

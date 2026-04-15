@@ -44,7 +44,7 @@ func TestExecuteWith(t *testing.T) {
 	env := map[string]string{
 		"TEST_VAR": "test_value",
 	}
-	ExecuteWith(env, "sh", "-c", "echo $TEST_VAR")
+	_ = ExecuteWith(env, "sh", "-c", "echo $TEST_VAR")
 }
 
 func TestExecuteWithMultipleEnvVars(t *testing.T) {
@@ -53,16 +53,16 @@ func TestExecuteWithMultipleEnvVars(t *testing.T) {
 		"VAR2": "value2",
 		"VAR3": "value3",
 	}
-	ExecuteWith(env, "sh", "-c", "echo $VAR1 $VAR2 $VAR3")
+	_ = ExecuteWith(env, "sh", "-c", "echo $VAR1 $VAR2 $VAR3")
 }
 
 func TestExecuteWithEmptyEnv(t *testing.T) {
 	env := map[string]string{}
-	ExecuteWith(env, "echo", "test")
+	_ = ExecuteWith(env, "echo", "test")
 }
 
 func TestExecuteWithNilEnv(t *testing.T) {
-	ExecuteWith(nil, "echo", "test")
+	_ = ExecuteWith(nil, "echo", "test")
 }
 
 func TestExecuteWithExistingEnvOverride(t *testing.T) {
@@ -74,14 +74,14 @@ func TestExecuteWithExistingEnvOverride(t *testing.T) {
 	env := map[string]string{
 		"SHELL_TEST_VAR": "overridden",
 	}
-	ExecuteWith(env, "sh", "-c", "echo $SHELL_TEST_VAR")
+	_ = ExecuteWith(env, "sh", "-c", "echo $SHELL_TEST_VAR")
 }
 
 func TestExecuteWithInvalidCommand(t *testing.T) {
 	env := map[string]string{
 		"TEST_VAR": "test",
 	}
-	ExecuteWith(env, "invalid-command-that-does-not-exist")
+	_ = ExecuteWith(env, "invalid-command-that-does-not-exist")
 }
 
 func TestExecuteScriptCommand(t *testing.T) {

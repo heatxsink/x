@@ -86,7 +86,7 @@ func Do(ctx context.Context, client *http.Client, req *http.Request) (*Tracer, e
 	}
 	htctx := httptrace.WithClientTrace(ctx, trace)
 	req = req.WithContext(htctx)
-	tt.Response, err = client.Do(req)
+	tt.Response, err = client.Do(req) //nolint:bodyclose // caller owns tt.Response and is responsible for closing the body.
 	if err != nil {
 		return nil, err
 	}

@@ -155,7 +155,7 @@ func parseReader(r io.Reader) (map[string]string, error) {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := scanner.Text()
-		line = strings.Replace(line, "\r", "", -1)
+		line = strings.ReplaceAll(line, "\r", "")
 		line = strings.TrimSpace(line)
 		if line == "" || line[0] == '#' {
 			continue

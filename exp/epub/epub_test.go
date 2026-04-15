@@ -167,7 +167,7 @@ func TestCountWordsAndPages_LargeContent(t *testing.T) {
 	dir := t.TempDir()
 	opts := defaultOpts()
 	// Generate exactly 500 words
-	var words []string
+	words := make([]string, 0, 500)
 	for range 500 {
 		words = append(words, "word")
 	}

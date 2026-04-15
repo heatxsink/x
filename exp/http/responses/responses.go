@@ -56,12 +56,12 @@ func JSONIndent(w http.ResponseWriter, httpStatus int, object interface{}) {
 	httpBody, _ := json.MarshalIndent(&object, "", "  ")
 	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(httpStatus)
-	w.Write(httpBody)
+	_, _ = w.Write(httpBody)
 }
 
 func JSON(w http.ResponseWriter, httpStatus int, object interface{}) {
 	httpBody, _ := json.Marshal(&object)
 	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(httpStatus)
-	w.Write(httpBody)
+	_, _ = w.Write(httpBody)
 }

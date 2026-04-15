@@ -88,7 +88,7 @@ func TestSendJSONWithHTTPError(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Bad Request"))
+		_, _ = w.Write([]byte("Bad Request"))
 	}))
 	defer server.Close()
 
@@ -108,7 +108,7 @@ func TestSendJSONWithServerError(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal Server Error"))
+		_, _ = w.Write([]byte("Internal Server Error"))
 	}))
 	defer server.Close()
 
@@ -209,7 +209,7 @@ func TestSendWithContextAndRetry(t *testing.T) {
 		attemptCount++
 		if attemptCount < 3 {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("Server Error"))
+			_, _ = w.Write([]byte("Server Error"))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -236,7 +236,7 @@ func TestSendWithContextAndRetryExhausted(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attemptCount++
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Server Error"))
+		_, _ = w.Write([]byte("Server Error"))
 	}))
 	defer server.Close()
 
@@ -262,7 +262,7 @@ func TestSendWithContextAndRetryZeroRetries(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Server Error"))
+		_, _ = w.Write([]byte("Server Error"))
 	}))
 	defer server.Close()
 
@@ -303,6 +303,7 @@ func TestPostWithContextInvalidURL(t *testing.T) {
 	}
 
 	if response != nil {
+		_ = response.Body.Close()
 		t.Errorf("Expected nil response, got %v", response)
 	}
 
@@ -317,7 +318,7 @@ func TestSendJSONWithMalformedResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", "10")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("short"))
+		_, _ = w.Write([]byte("short"))
 	}))
 	defer server.Close()
 

@@ -22,7 +22,7 @@ func TestWriteAccumulatesBytes(t *testing.T) {
 		t.Fatalf("expected current=5, got %d", bar.current)
 	}
 
-	bar.Write([]byte("world!"))
+	_, _ = bar.Write([]byte("world!"))
 	if bar.current != 11 {
 		t.Fatalf("expected current=11, got %d", bar.current)
 	}
@@ -31,7 +31,7 @@ func TestWriteAccumulatesBytes(t *testing.T) {
 func TestCloseDoesNotPanic(t *testing.T) {
 	bar := DefaultBytes(100, "Test")
 	bar.output = &bytes.Buffer{}
-	bar.Write([]byte("data"))
+	_, _ = bar.Write([]byte("data"))
 	if err := bar.Close(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -42,8 +42,8 @@ func TestRenderContainsExpectedElements(t *testing.T) {
 	bar := DefaultBytes(1024, "Uploading")
 	bar.output = &buf
 
-	bar.Write(make([]byte, 512))
-	bar.Close()
+	_, _ = bar.Write(make([]byte, 512))
+	_ = bar.Close()
 
 	output := buf.String()
 	if !strings.Contains(output, "Uploading") {
@@ -84,8 +84,8 @@ func TestZeroTotal(t *testing.T) {
 	var buf bytes.Buffer
 	bar := DefaultBytes(0, "Empty")
 	bar.output = &buf
-	bar.Write([]byte("data"))
-	bar.Close()
+	_, _ = bar.Write([]byte("data"))
+	_ = bar.Close()
 
 	output := buf.String()
 	if !strings.Contains(output, "0%") {
@@ -152,8 +152,8 @@ func TestBlockCharsOption(t *testing.T) {
 	bar := DefaultBytes(100, "Upload", WithBlockChars())
 	bar.output = &buf
 
-	bar.Write(make([]byte, 50))
-	bar.Close()
+	_, _ = bar.Write(make([]byte, 50))
+	_ = bar.Close()
 
 	output := buf.String()
 	if !strings.Contains(output, "\u2588") {
@@ -167,8 +167,8 @@ func TestSpeedDisplay(t *testing.T) {
 	bar.output = &buf
 	bar.startTime = time.Now().Add(-1 * time.Second)
 
-	bar.Write(make([]byte, 512*1024))
-	bar.Close()
+	_, _ = bar.Write(make([]byte, 512*1024))
+	_ = bar.Close()
 
 	output := buf.String()
 	if !strings.Contains(output, "/s") {
@@ -185,8 +185,8 @@ func TestETADisplay(t *testing.T) {
 	bar.output = &buf
 	bar.startTime = time.Now().Add(-5 * time.Second)
 
-	bar.Write(make([]byte, 512))
-	bar.Close()
+	_, _ = bar.Write(make([]byte, 512))
+	_ = bar.Close()
 
 	output := buf.String()
 	if !strings.Contains(output, "[") || !strings.Contains(output, "]") {
@@ -199,8 +199,8 @@ func TestETAHiddenAtComplete(t *testing.T) {
 	bar := DefaultBytes(100, "Upload", WithETA())
 	bar.output = &buf
 
-	bar.Write(make([]byte, 100))
-	bar.Close()
+	_, _ = bar.Write(make([]byte, 100))
+	_ = bar.Close()
 
 	output := buf.String()
 	if strings.Contains(output, "[") && strings.Contains(output, "]") {

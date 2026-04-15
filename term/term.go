@@ -158,7 +158,7 @@ func DisplayLn(reader io.Reader, wg *sync.WaitGroup, displayFn func(string)) {
 		displayFn(scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
-		Errorln(fmt.Errorf("SCANNER failed to read from reader %s", err))
+		Errorln(fmt.Errorf("SCANNER failed to read from reader %w", err))
 	}
 	wg.Done()
 }
@@ -172,7 +172,7 @@ func echo(on bool) {
 		Sys:   nil}
 	var ws syscall.WaitStatus
 	cmd := "echo"
-	if on == false {
+	if !on {
 		cmd = "-echo"
 	}
 

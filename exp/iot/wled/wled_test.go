@@ -79,8 +79,8 @@ func TestAllBrightness(t *testing.T) {
 	if w == nil {
 		t.Skip("Skipping test: WLed client not initialized")
 	}
-	reset(true)
-	for i := 10; i <= 255; i = i + 10 {
+	_ = reset(true)
+	for i := 10; i <= 255; i += 10 {
 		if err := w.Brightness(TopicAll, int64(i)); err != nil {
 			t.Error(err)
 		}
@@ -103,7 +103,7 @@ func TestAllColor(t *testing.T) {
 		"#FE5A1D",
 		"#ED008C",
 	}
-	reset(true)
+	_ = reset(true)
 	for _, c := range presets {
 		if err := w.Color(TopicAll, c); err != nil {
 			t.Error(err)

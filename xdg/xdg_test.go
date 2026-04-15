@@ -196,8 +196,12 @@ func TestLookupConfigFindsExistingFile(t *testing.T) {
 	}
 	dir := t.TempDir()
 	appDir := filepath.Join(dir, "testapp")
-	os.MkdirAll(appDir, 0755)
-	os.WriteFile(filepath.Join(appDir, "config.yaml"), []byte("test"), 0644)
+	if err := os.MkdirAll(appDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(appDir, "config.yaml"), []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
