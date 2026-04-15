@@ -4,6 +4,8 @@ package term
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -163,7 +165,7 @@ func DisplayLn(reader io.Reader, wg *sync.WaitGroup, displayFn func(string)) {
 	wg.Done()
 }
 
-func echo(on bool) {
+func echo(on bool) error {
 	// Common settings and variables for both stty calls.
 	attrs := syscall.ProcAttr{
 		Dir:   "",
@@ -182,41 +184,72 @@ func echo(on bool) {
 		[]string{"stty", cmd},
 		&attrs)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("stty fork: %w", err)
 	}
 
 	// Wait for the stty process to complete.
-	_, err = syscall.Wait4(pid, &ws, 0, nil)
-	if err != nil {
-		panic(err)
+	if _, err := syscall.Wait4(pid, &ws, 0, nil); err != nil {
+		return fmt.Errorf("stty wait: %w", err)
+	}
+	return nil
+}
+
+// PasswordPromptContext writes prompt to stdout, disables terminal echo, and
+// reads a line from stdin. Echo is restored before returning. If ctx is
+// canceled while waiting for input the function returns ctx.Err(); the caller
+// is responsible for any signal-to-cancel wiring (e.g. signal.NotifyContext
+// with os.Interrupt).
+func PasswordPromptContext(ctx context.Context, prompt string) (string, error) {
+	fmt.Print(prompt)
+	if err := echo(false); err != nil {
+		return "", fmt.Errorf("disable echo: %w", err)
+	}
+	defer func() {
+		// Best-effort echo restore; the caller already has a value (or error),
+		// and there is no useful action to take if restore fails.
+		_ = echo(true)
+		fmt.Println("")
+	}()
+
+	type result struct {
+		text string
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		text, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		done <- result{text: text, err: err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case r := <-done:
+		if r.err != nil {
+			return "", fmt.Errorf("read password: %w", r.err)
+		}
+		return strings.TrimSpace(r.text), nil
 	}
 }
 
+// PasswordPrompt is a context-less wrapper around PasswordPromptContext that
+// installs an os.Interrupt handler and exits the process on ^C or read error.
+//
+// Deprecated: use PasswordPromptContext, which returns errors instead of
+// terminating the process and lets the caller wire signal handling.
 func PasswordPrompt(prompt string) string {
-	fmt.Print(prompt)
-	// Catch a ^C interrupt.
-	// Make sure that we reset term echo before exiting.
-	signalChannel := make(chan os.Signal, 1)
-	signal.Notify(signalChannel, os.Interrupt)
-	go func() {
-		for range signalChannel {
-			fmt.Println("\n^C interrupt.")
-			echo(true)
-			os.Exit(1)
-		}
-	}()
-	// Echo is disabled, now grab the data.
-	echo(false) // disable terminal echo
-	reader := bufio.NewReader(os.Stdin)
-	text, err := reader.ReadString('\n')
-	echo(true) // always re-enable terminal echo
-	fmt.Println("")
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	text, err := PasswordPromptContext(ctx, prompt)
+	cancel()
 	if err != nil {
-		// The terminal has been reset, go ahead and exit.
-		fmt.Println("ERROR:", err.Error())
+		if errors.Is(err, context.Canceled) {
+			fmt.Println("\n^C interrupt.")
+		} else {
+			fmt.Println("ERROR:", err.Error())
+		}
 		os.Exit(1)
 	}
-	return strings.TrimSpace(text)
+	return text
 }
 
 func YesNoPrompt(label string, def bool) bool {
