@@ -60,7 +60,7 @@ func New(bucket string, startDate string) *Manifest {
 func (m *Manifest) Init(ctx context.Context) (*Item, []*Item, error) {
 	ii, err := m.Load(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Load() %w", err)
+		return nil, nil, fmt.Errorf("loading manifest: %w", err)
 	}
 	oldMinor := ii[len(ii)-1].Version.Minor
 	point := ii[len(ii)-1].Version.Point + 1
