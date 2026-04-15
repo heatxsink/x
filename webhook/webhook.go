@@ -37,7 +37,7 @@ func SendJSONWithClient(client *http.Client, url string, data interface{}) error
 }
 
 func post(client *http.Client, url string, payload []byte) (int, []byte, error) {
-	request, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewBuffer(payload))
 	if err != nil {
 		return -1, nil, err
 	}
@@ -58,7 +58,7 @@ func post(client *http.Client, url string, payload []byte) (int, []byte, error) 
 func postWithContext(ctx context.Context, client *http.Client, url string, headers map[string]string, payload []byte) (*http.Response, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(payload))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create new request: %v", err)
+		return nil, fmt.Errorf("failed to create new request: %w", err)
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json")

@@ -12,7 +12,7 @@ import (
 func TestDoRequest(t *testing.T) {
 	ctx := context.Background()
 	url := "https://www.google.com"
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		t.Error(err)
 	}

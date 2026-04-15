@@ -66,8 +66,7 @@ func TestEmbeds(t *testing.T) {
 			},
 		},
 	}
-	var ee []*MessageEmbed
-	ee = append(ee, embed)
+	ee := []*MessageEmbed{embed}
 	err := d.SendEmbeds(ee)
 	if err != nil {
 		t.Error(err)

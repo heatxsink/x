@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,29 +11,45 @@ import (
 	"github.com/heatxsink/x/term"
 )
 
+// ExecuteWithContext runs cmd with the given env overlay and the supplied
+// context, so the caller can cancel or set a deadline on the child process.
+func ExecuteWithContext(ctx context.Context, env map[string]string, cmd string, args ...string) error {
+	return execute(ctx, env, cmd, args...)
+}
+
+// ExecuteContext runs cmd under the supplied context.
+func ExecuteContext(ctx context.Context, cmd string, args ...string) error {
+	return execute(ctx, nil, cmd, args...)
+}
+
+// ExecuteWith is a context-less wrapper around ExecuteWithContext.
+//
+// Deprecated: use ExecuteWithContext.
 func ExecuteWith(env map[string]string, cmd string, args ...string) error {
-	return execute(env, cmd, args...)
+	return execute(context.Background(), env, cmd, args...)
 }
 
+// Execute is a context-less wrapper around ExecuteContext.
+//
+// Deprecated: use ExecuteContext.
 func Execute(cmd string, args ...string) error {
-	var env map[string]string
-	return execute(env, cmd, args...)
+	return execute(context.Background(), nil, cmd, args...)
 }
 
-func execute(env map[string]string, command string, args ...string) error {
+func execute(ctx context.Context, env map[string]string, command string, args ...string) error {
 	start := term.StartlnWithTime(command, args...)
-	c := exec.Command(command, args...)
+	c := exec.CommandContext(ctx, command, args...) // #nosec G204 -- command is caller-controlled, this is the function's purpose
 	c.Env = os.Environ()
 	for k, v := range env {
 		c.Env = append(c.Env, k+"="+v)
 	}
 	stdout, err := c.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("failed to get stdout. %v", err)
+		return fmt.Errorf("failed to get stdout. %w", err)
 	}
 	stderr, err := c.StderrPipe()
 	if err != nil {
-		return fmt.Errorf("failed to get stderr: %v", err)
+		return fmt.Errorf("failed to get stderr: %w", err)
 	}
 	var wg sync.WaitGroup
 	wg.Add(1)

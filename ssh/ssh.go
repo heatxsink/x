@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -32,8 +33,11 @@ type Client struct {
 	debug        bool
 }
 
-func NewWithAgent(hostname string, port int, username string, debug bool) (*Client, error) {
-	sock, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK"))
+// NewWithAgentContext dials the SSH agent socket under ctx, so the caller
+// can bound how long the dial may take.
+func NewWithAgentContext(ctx context.Context, hostname string, port int, username string, debug bool) (*Client, error) {
+	var d net.Dialer
+	sock, err := d.DialContext(ctx, "unix", os.Getenv("SSH_AUTH_SOCK"))
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +67,14 @@ func NewWithAgent(hostname string, port int, username string, debug bool) (*Clie
 		debug:       debug,
 	}
 	return client, nil
+}
+
+// NewWithAgent is a context-less wrapper around NewWithAgentContext.
+//
+// Deprecated: use NewWithAgentContext, which lets the caller bound the
+// agent-socket dial.
+func NewWithAgent(hostname string, port int, username string, debug bool) (*Client, error) {
+	return NewWithAgentContext(context.Background(), hostname, port, username, debug)
 }
 
 func NewWithPrivateKey(hostname string, port int, username, privateKeyFilename, privateKeyPassphrase string) (*Client, error) {
@@ -124,12 +136,13 @@ func (c *Client) Connect() error {
 	addr := fmt.Sprintf("%s:%d", c.hostname, c.port)
 	client, err := ssh.Dial("tcp", addr, c.ClientConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s, %v", c.hostname, err)
+		return fmt.Errorf("failed to connect to %s, %w", c.hostname, err)
 	}
 	c.client = client
 	c.isConnected = true
 	if c.useAgent {
-		agent.ForwardToAgent(client, c.agentClient)
+		// Best-effort: agent forwarding failure must not break the connection.
+		_ = agent.ForwardToAgent(client, c.agentClient)
 	}
 	return nil
 }
@@ -141,10 +154,11 @@ func (c *Client) NewSession() (*ssh.Session, error) {
 	}
 	session, err := c.client.NewSession()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create SSH session for %s, %v", c.hostname, err)
+		return nil, fmt.Errorf("failed to create SSH session for %s, %w", c.hostname, err)
 	}
 	if c.useAgent {
-		agent.RequestAgentForwarding(session)
+		// Best-effort: server may refuse forwarding (e.g. AllowAgentForwarding no).
+		_ = agent.RequestAgentForwarding(session)
 	}
 	return session, nil
 }
@@ -172,12 +186,12 @@ func (c *Client) Close() error {
 func (c *Client) Capture(command string) (string, error) {
 	session, err := c.NewSession()
 	if err != nil {
-		return "", fmt.Errorf("create session: %v", err)
+		return "", fmt.Errorf("create session: %w", err)
 	}
 	defer session.Close()
 	out, err := session.CombinedOutput(command)
 	if err != nil {
-		return "", fmt.Errorf("failed to execute: %v", err)
+		return "", fmt.Errorf("failed to execute: %w", err)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
@@ -188,9 +202,9 @@ func (c *Client) RequestPty(session *ssh.Session) error {
 		ssh.TTY_OP_ISPEED: 14400, // input speed = 14.4kbaud
 		ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
 	}
-	//request pseudo terminal
+	// request pseudo terminal
 	if err := session.RequestPty("xterm", 40, 80, modes); err != nil {
-		return fmt.Errorf("pseudo terminal failed: %v", err)
+		return fmt.Errorf("pseudo terminal failed: %w", err)
 	}
 	return nil
 }
@@ -201,18 +215,18 @@ func (c *Client) Execute(command string) error {
 	session, err := c.NewSession()
 	if err != nil {
 		term.EndlnWithTime(time.Since(start), false)
-		return fmt.Errorf("create session: %v", err)
+		return fmt.Errorf("create session: %w", err)
 	}
 	defer session.Close()
 	stdout, err := session.StdoutPipe()
 	if err != nil {
 		term.EndlnWithTime(time.Since(start), false)
-		return fmt.Errorf("stdout pipe: %v", err)
+		return fmt.Errorf("stdout pipe: %w", err)
 	}
 	stderr, err := session.StderrPipe()
 	if err != nil {
 		term.EndlnWithTime(time.Since(start), false)
-		return fmt.Errorf("stderr pipe: %v", err)
+		return fmt.Errorf("stderr pipe: %w", err)
 	}
 	wg.Add(1)
 	go term.DisplayLn(stdout, &wg, func(line string) {
@@ -225,12 +239,12 @@ func (c *Client) Execute(command string) error {
 	err = session.Start(command)
 	if err != nil {
 		term.EndlnWithTime(time.Since(start), false)
-		return fmt.Errorf("session start: %v", err)
+		return fmt.Errorf("session start: %w", err)
 	}
 	err = session.Wait()
 	if err != nil {
 		term.EndlnWithTime(time.Since(start), false)
-		return fmt.Errorf("session wait: %v", err)
+		return fmt.Errorf("session wait: %w", err)
 	}
 	wg.Wait()
 	term.EndlnWithTime(time.Since(start), true)
@@ -256,28 +270,28 @@ func (c *Client) ExecuteInteractively(command string, inputMap map[string]string
 	session, err := c.NewSession()
 	if err != nil {
 		term.EndlnWithTime(time.Since(start), false)
-		return fmt.Errorf("create session: %v", err)
+		return fmt.Errorf("create session: %w", err)
 	}
 	defer session.Close()
 	err = c.RequestPty(session)
 	if err != nil {
 		term.EndlnWithTime(time.Since(start), false)
-		return fmt.Errorf("failed to request pty: %v", err)
+		return fmt.Errorf("failed to request pty: %w", err)
 	}
 	stdin, err := session.StdinPipe()
 	if err != nil {
 		term.EndlnWithTime(time.Since(start), false)
-		return fmt.Errorf("stdin pipe: %v", err)
+		return fmt.Errorf("stdin pipe: %w", err)
 	}
 	stdout, err := session.StdoutPipe()
 	if err != nil {
 		term.EndlnWithTime(time.Since(start), false)
-		return fmt.Errorf("stdout pipe: %v", err)
+		return fmt.Errorf("stdout pipe: %w", err)
 	}
 	stderr, err := session.StderrPipe()
 	if err != nil {
 		term.EndlnWithTime(time.Since(start), false)
-		return fmt.Errorf("stderr pipe: %v", err)
+		return fmt.Errorf("stderr pipe: %w", err)
 	}
 	wg.Add(1)
 	go term.DisplayLn(stderr, &wg, func(line string) {
@@ -286,7 +300,7 @@ func (c *Client) ExecuteInteractively(command string, inputMap map[string]string
 	err = session.Start(command)
 	if err != nil {
 		term.EndlnWithTime(time.Since(start), false)
-		return fmt.Errorf("starting the session: %v", err)
+		return fmt.Errorf("starting the session: %w", err)
 	}
 	scanner := bufio.NewScanner(stdout)
 	scanner.Split(bufio.ScanBytes)
@@ -312,7 +326,7 @@ func (c *Client) ExecuteInteractively(command string, inputMap map[string]string
 	}
 	if err = session.Wait(); err != nil {
 		term.EndlnWithTime(time.Since(start), false)
-		return fmt.Errorf("session wait: %v", err)
+		return fmt.Errorf("session wait: %w", err)
 	}
 	term.EndlnWithTime(time.Since(start), true)
 	return nil
@@ -321,12 +335,12 @@ func (c *Client) ExecuteInteractively(command string, inputMap map[string]string
 func (c *Client) uploadByReader(r io.Reader, remotePath string, size int64, permission string, debug bool) error {
 	session, err := c.NewSession()
 	if err != nil {
-		return fmt.Errorf("failed to create session: %v", err)
+		return fmt.Errorf("failed to create session: %w", err)
 	}
 	defer session.Close()
 	w, err := session.StdinPipe()
 	if err != nil {
-		return fmt.Errorf("failed to create stdin pipe: %v", err)
+		return fmt.Errorf("failed to create stdin pipe: %w", err)
 	}
 	defer w.Close()
 	if debug {
@@ -334,16 +348,16 @@ func (c *Client) uploadByReader(r io.Reader, remotePath string, size int64, perm
 	}
 	err = session.Start("/usr/bin/scp -qt " + path.Dir(remotePath))
 	if err != nil {
-		return fmt.Errorf("failed to start session: %v", err)
+		return fmt.Errorf("failed to start session: %w", err)
 	}
 	go func() {
 		pb := progressbar.DefaultBytes(size, "Uploading")
 		teeReader := io.TeeReader(r, pb)
-		fmt.Fprintln(w, "C"+permission, size, path.Base(remotePath))
+		_, _ = fmt.Fprintln(w, "C"+permission, size, path.Base(remotePath))
 		if _, err := io.Copy(w, teeReader); err != nil {
-			term.Errorln(fmt.Errorf("failed to copy io: %v", err))
+			term.Errorln(fmt.Errorf("failed to copy io: %w", err))
 		}
-		fmt.Fprintln(w, "\x00")
+		_, _ = fmt.Fprintln(w, "\x00")
 		if err = pb.Close(); err != nil {
 			term.Errorln(err)
 		}
@@ -354,7 +368,7 @@ func (c *Client) uploadByReader(r io.Reader, remotePath string, size int64, perm
 			// Return nil because this is expected successful behavior.
 			return nil
 		}
-		return fmt.Errorf("error on session wait: %v", err)
+		return fmt.Errorf("error on session wait: %w", err)
 	}
 	return nil
 }
@@ -362,12 +376,12 @@ func (c *Client) uploadByReader(r io.Reader, remotePath string, size int64, perm
 func (c *Client) Upload(localPath string, remotePath string, permission string, debug bool) error {
 	fh, err := os.Open(localPath)
 	if err != nil {
-		return fmt.Errorf("failed to open local file: %v", err)
+		return fmt.Errorf("failed to open local file: %w", err)
 	}
 	defer fh.Close()
 	stat, err := fh.Stat()
 	if err != nil {
-		return fmt.Errorf("failed to stat the local file: %v", err)
+		return fmt.Errorf("failed to stat the local file: %w", err)
 	}
 	r := bufio.NewReader(fh)
 	return c.uploadByReader(r, remotePath, stat.Size(), permission, debug)

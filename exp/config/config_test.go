@@ -366,10 +366,8 @@ func TestURISchemeHandling(t *testing.T) {
 				if tc.errorContains != "" && !strings.Contains(err.Error(), tc.errorContains) {
 					t.Errorf("Expected error containing '%s', got: %v", tc.errorContains, err)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("Unexpected error for URI '%s': %v", tc.uri, err)
-				}
+			} else if err != nil {
+				t.Errorf("Unexpected error for URI '%s': %v", tc.uri, err)
 			}
 
 			if err != nil && content != nil {

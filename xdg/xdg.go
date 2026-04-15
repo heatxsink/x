@@ -262,14 +262,14 @@ func (s *Scope) xdgDirs(homeEnv, homeDefault, dirsEnv, dirsDefault string) ([]st
 			}
 			primary = filepath.Join(home, homeDefault)
 		}
-		dirs := []string{primary}
 		extra := os.Getenv(dirsEnv)
 		if extra == "" {
 			extra = dirsDefault
 		}
-		for _, d := range splitPaths(extra) {
-			dirs = append(dirs, d)
-		}
+		extras := splitPaths(extra)
+		dirs := make([]string, 0, 1+len(extras))
+		dirs = append(dirs, primary)
+		dirs = append(dirs, extras...)
 		return dirs, nil
 	case System:
 		extra := os.Getenv(dirsEnv)
@@ -295,7 +295,7 @@ func (s *Scope) darwinDir(subdir string) (string, error) {
 	case User, CustomHome:
 		return filepath.Join(home, "Library", subdir), nil
 	case System:
-		return filepath.Join("/Library", subdir), nil
+		return "/Library/" + subdir, nil
 	}
 	return "", ErrInvalidScope
 }
@@ -307,7 +307,7 @@ func (s *Scope) darwinDirs(subdir string) ([]string, error) {
 	}
 	dirs := []string{d}
 	if s.Type == User {
-		dirs = append(dirs, filepath.Join("/Library", subdir))
+		dirs = append(dirs, "/Library/"+subdir)
 	}
 	return dirs, nil
 }

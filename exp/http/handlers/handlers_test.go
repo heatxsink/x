@@ -20,7 +20,7 @@ func TestCORS(t *testing.T) {
 
 	handler := CORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	}), allowedOrigins, allowedMethods, allowedHeaders)
 
 	t.Run("simple request", func(t *testing.T) {
@@ -65,7 +65,7 @@ func TestCORSWithLogger(t *testing.T) {
 
 	handler := CORSWithLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	}), allowedOrigins, allowedMethods, allowedHeaders, testLogger)
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -160,7 +160,7 @@ func TestRecover(t *testing.T) {
 	t.Run("no panic", func(t *testing.T) {
 		handler := logger.WithLogger(testLogger)(Recover(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("OK"))
+			_, _ = w.Write([]byte("OK"))
 		})))
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -185,7 +185,7 @@ func TestDump(t *testing.T) {
 	t.Run("dump enabled", func(t *testing.T) {
 		handler := logger.WithLogger(testLogger)(Dump(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("OK"))
+			_, _ = w.Write([]byte("OK"))
 		}), false))
 
 		req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewBufferString("test body"))
@@ -220,7 +220,7 @@ func TestDump(t *testing.T) {
 	t.Run("dump bypassed", func(t *testing.T) {
 		handler := logger.WithLogger(testLogger)(Dump(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("OK"))
+			_, _ = w.Write([]byte("OK"))
 		}), true))
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -244,7 +244,7 @@ func TestDump(t *testing.T) {
 func TestBlackhole(t *testing.T) {
 	handler := Blackhole(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	}))
 
 	t.Run("path with trailing slash", func(t *testing.T) {
@@ -278,7 +278,7 @@ func TestMinify(t *testing.T) {
 	handler := Minify(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("<html>  <body>   <h1>Hello World</h1>   </body>  </html>"))
+		_, _ = w.Write([]byte("<html>  <body>   <h1>Hello World</h1>   </body>  </html>"))
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -304,7 +304,7 @@ func TestCompress(t *testing.T) {
 	handler := Compress(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		largeContent := strings.Repeat("This is a test string for compression. ", 100)
-		w.Write([]byte(largeContent))
+		_, _ = w.Write([]byte(largeContent))
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -330,7 +330,7 @@ func TestPatch(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	})
 
 	allowedOrigins := []string{"http://localhost:3000"}
@@ -366,7 +366,7 @@ func TestPatchDebug(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	})
 
 	allowedOrigins := []string{"http://localhost:3000"}
@@ -406,7 +406,7 @@ func TestAccessLog(t *testing.T) {
 
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("hello"))
+		_, _ = w.Write([]byte("hello"))
 	})
 
 	handler := logger.WithLogger(testLogger)(AccessLog(inner))
@@ -505,7 +505,7 @@ func TestAccessLog(t *testing.T) {
 	t.Run("default status 200 when WriteHeader not called", func(t *testing.T) {
 		recorded.TakeAll()
 		noStatusHandler := logger.WithLogger(testLogger)(AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("implicit 200"))
+			_, _ = w.Write([]byte("implicit 200"))
 		})))
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -552,7 +552,7 @@ func TestMiddlewareChaining(t *testing.T) {
 						http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 							w.Header().Set("Content-Type", "text/html")
 							w.WriteHeader(http.StatusOK)
-							w.Write([]byte("<html>  <body>   <h1>Test</h1>   </body>  </html>"))
+							_, _ = w.Write([]byte("<html>  <body>   <h1>Test</h1>   </body>  </html>"))
 						}),
 						[]string{"http://localhost:3000"},
 						[]string{http.MethodGet},

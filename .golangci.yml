@@ -1,98 +1,50 @@
-run:
-  timeout: 5m
-  modules-download-mode: readonly
-
-linters-settings:
-  govet:
-    check-shadowing: true
-  golint:
-    min-confidence: 0
-  gocyclo:
-    min-complexity: 15
-  maligned:
-    suggest-new: true
-  dupl:
-    threshold: 100
-  goconst:
-    min-len: 2
-    min-occurrences: 2
-  misspell:
-    locale: US
-  lll:
-    line-length: 120
-  goimports:
-    local-prefixes: github.com/heatxsink/x
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - dupImport
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
-
+version: "2"
 linters:
   enable:
     - bodyclose
-    - deadcode
-    - depguard
-    - dogsled
-    - dupl
-    - errcheck
-    - exhaustive
-    - exportloopref
-    - funlen
-    - gochecknoinits
-    - goconst
+    - contextcheck
+    - errorlint
+    - forcetypeassert
     - gocritic
-    - gocyclo
-    - gofmt
-    - goimports
-    - golint
-    - gomnd
-    - goprintffuncname
-    - gosec
-    - gosimple
-    - govet
-    - ineffassign
-    - interfacer
-    - lll
+    - makezero
     - misspell
-    - nakedret
+    - nilerr
+    - nilnil
     - noctx
-    - nolintlint
+    - prealloc
     - rowserrcheck
-    - scopelint
-    - staticcheck
-    - structcheck
-    - stylecheck
-    - typecheck
-    - unconvert
-    - unparam
-    - unused
-    - varcheck
-    - whitespace
-
+    - sqlclosecheck
+    - wastedassign
+  settings:
+    gocritic:
+      disabled-checks:
+        - hugeParam
+      enabled-tags:
+        - diagnostic
+        - performance
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters:
+          - noctx
+    paths:
+      - testdata
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gomnd
-        - funlen
-        - gocyclo
-    - path: exp/
-      linters:
-        - golint
-        - stylecheck
-  exclude:
-    # for "public interface" comment
-    - "exported method .* should have comment or be unexported"
-    - "exported function .* should have comment or be unexported"
-    - "exported type .* should have comment or be unexported"
-    - "exported var .* should have comment or be unexported"
-    - "exported const .* should have comment or be unexported"
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

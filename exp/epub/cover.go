@@ -73,28 +73,32 @@ func ExtractCover(epubPath string, destPath string, quality int) error {
 func findContainerOPFPath(zr *zip.Reader) string {
 	for _, f := range zr.File {
 		if f.Name == "META-INF/container.xml" {
-			rc, err := f.Open()
-			if err != nil {
-				return ""
-			}
-			defer func() { _ = rc.Close() }()
-			data, err := io.ReadAll(rc)
-			if err != nil {
-				return ""
-			}
-			type container struct {
-				Rootfiles struct {
-					Rootfile struct {
-						Path string `xml:"full-path,attr"`
-					} `xml:"rootfile"`
-				} `xml:"rootfiles"`
-			}
-			var c container
-			if err := xmlDecode(data, &c); err != nil {
-				return ""
-			}
-			return c.Rootfiles.Rootfile.Path
+			return readContainerOPFPath(f)
 		}
 	}
 	return ""
+}
+
+func readContainerOPFPath(f *zip.File) string {
+	rc, err := f.Open()
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = rc.Close() }()
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return ""
+	}
+	type container struct {
+		Rootfiles struct {
+			Rootfile struct {
+				Path string `xml:"full-path,attr"`
+			} `xml:"rootfile"`
+		} `xml:"rootfiles"`
+	}
+	var c container
+	if err := xmlDecode(data, &c); err != nil {
+		return ""
+	}
+	return c.Rootfiles.Rootfile.Path
 }

@@ -66,9 +66,9 @@ func initLoggerToStdErr() *zap.Logger {
 func initLoggerToFile(filename string) *zap.Logger {
 	lumberJackLogger := &lumberjack.Logger{
 		Filename:   filename,
-		MaxSize:    50, //mb
+		MaxSize:    50, // mb
 		MaxBackups: 10,
-		MaxAge:     30, //days
+		MaxAge:     30, // days
 		Compress:   false,
 	}
 	writerSyncer := zapcore.AddSync(lumberJackLogger)

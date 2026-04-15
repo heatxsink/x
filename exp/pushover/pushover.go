@@ -1,12 +1,22 @@
 package pushover
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	po "github.com/gregdel/pushover"
 	"gopkg.in/yaml.v3"
 )
+
+// ErrDisabled is returned by Send* methods when the Pushover instance is disabled.
+// Callers should treat it as a successful no-op:
+//
+//	resp, err := p.SendGlance(...)
+//	if err != nil && !errors.Is(err, pushover.ErrDisabled) {
+//	    // real failure
+//	}
+var ErrDisabled = errors.New("pushover: disabled")
 
 type Pushover struct {
 	Name       string `yaml:"name"`
@@ -77,7 +87,7 @@ func (p *Pushover) SendMessage(message string) error {
 
 func (p *Pushover) SendGlance(title, text, subText string, count, percent int) (*po.Response, error) {
 	if !p.Enabled {
-		return nil, nil
+		return nil, ErrDisabled
 	}
 	app := po.New(p.AppToken)
 	r := po.NewRecipient(p.UserToken)
@@ -94,7 +104,7 @@ func (p *Pushover) SendGlance(title, text, subText string, count, percent int) (
 
 func (p *Pushover) SendGlanceTextOnly(title, text, subText string) (*po.Response, error) {
 	if !p.Enabled {
-		return nil, nil
+		return nil, ErrDisabled
 	}
 	app := po.New(p.AppToken)
 	r := po.NewRecipient(p.UserToken)
@@ -109,7 +119,7 @@ func (p *Pushover) SendGlanceTextOnly(title, text, subText string) (*po.Response
 
 func (p *Pushover) SendGlanceCountOnly(count int) (*po.Response, error) {
 	if !p.Enabled {
-		return nil, nil
+		return nil, ErrDisabled
 	}
 	app := po.New(p.AppToken)
 	r := po.NewRecipient(p.UserToken)

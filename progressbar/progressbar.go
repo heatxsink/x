@@ -174,11 +174,12 @@ func (b *Bar) render() {
 	var bar strings.Builder
 	bar.Grow(b.width)
 	for i := range b.width {
-		if i < filled {
+		switch {
+		case i < filled:
 			bar.WriteString(b.fill)
-		} else if i == filled && filled < b.width {
+		case i == filled && filled < b.width:
 			bar.WriteString(b.head)
-		} else {
+		default:
 			bar.WriteString(b.empty)
 		}
 	}

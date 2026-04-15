@@ -53,7 +53,7 @@ func TestGet(t *testing.T) {
 		}
 
 		logger.Info("test message")
-		logger.Sync()
+		_ = logger.Sync()
 
 		if _, err := os.Stat(logFile); os.IsNotExist(err) {
 			t.Error("Log file should have been created")
@@ -80,7 +80,7 @@ func TestFile(t *testing.T) {
 	}
 
 	logger.Info("test file message")
-	logger.Sync()
+	_ = logger.Sync()
 
 	if _, err := os.Stat(logFile); os.IsNotExist(err) {
 		t.Error("Log file should have been created")
@@ -150,7 +150,7 @@ func TestInitLoggerToFile(t *testing.T) {
 	}
 
 	logger.Info("test init message")
-	logger.Sync()
+	_ = logger.Sync()
 
 	if _, err := os.Stat(logFile); os.IsNotExist(err) {
 		t.Error("Log file should have been created")
@@ -339,13 +339,13 @@ func TestLoggerIntegration(t *testing.T) {
 		done := make(chan string)
 		go func() {
 			var buf bytes.Buffer
-			io.Copy(&buf, r)
+			_, _ = io.Copy(&buf, r)
 			done <- buf.String()
 		}()
 
 		logger := StdErr()
 		logger.Info("integration test message")
-		logger.Sync()
+		_ = logger.Sync()
 
 		w.Close()
 		os.Stderr = old
@@ -368,7 +368,7 @@ func TestLoggerIntegration(t *testing.T) {
 		logger.Info("file integration test")
 		logger.Warn("warning message")
 		logger.Error("error message")
-		logger.Sync()
+		_ = logger.Sync()
 
 		time.Sleep(100 * time.Millisecond)
 
@@ -457,7 +457,7 @@ func TestLoggerLevels(t *testing.T) {
 	logger.Info("info message")
 	logger.Warn("warn message")
 	logger.Error("error message")
-	logger.Sync()
+	_ = logger.Sync()
 
 	time.Sleep(100 * time.Millisecond)
 

@@ -242,7 +242,9 @@ func TestMarshalEscaping(t *testing.T) {
 func TestLoadDoesNotOverride(t *testing.T) {
 	dir := t.TempDir()
 	envFile := filepath.Join(dir, ".env")
-	os.WriteFile(envFile, []byte("TEST_DOTENV_NO_OVERRIDE=from_file\n"), 0644)
+	if err := os.WriteFile(envFile, []byte("TEST_DOTENV_NO_OVERRIDE=from_file\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Setenv("TEST_DOTENV_NO_OVERRIDE", "from_env")
 
@@ -258,7 +260,9 @@ func TestLoadDoesNotOverride(t *testing.T) {
 func TestOverloadDoesOverride(t *testing.T) {
 	dir := t.TempDir()
 	envFile := filepath.Join(dir, ".env")
-	os.WriteFile(envFile, []byte("TEST_DOTENV_OVERRIDE=from_file\n"), 0644)
+	if err := os.WriteFile(envFile, []byte("TEST_DOTENV_OVERRIDE=from_file\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Setenv("TEST_DOTENV_OVERRIDE", "from_env")
 
@@ -274,7 +278,9 @@ func TestOverloadDoesOverride(t *testing.T) {
 func TestReadDoesNotModifyEnv(t *testing.T) {
 	dir := t.TempDir()
 	envFile := filepath.Join(dir, ".env")
-	os.WriteFile(envFile, []byte("TEST_DOTENV_READ_ONLY=secret\n"), 0644)
+	if err := os.WriteFile(envFile, []byte("TEST_DOTENV_READ_ONLY=secret\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	m, err := Read(envFile)
 	if err != nil {
@@ -314,11 +320,15 @@ func TestWriteAndRead(t *testing.T) {
 func TestLoadDefaultFilename(t *testing.T) {
 	dir := t.TempDir()
 	envFile := filepath.Join(dir, ".env")
-	os.WriteFile(envFile, []byte("TEST_DOTENV_DEFAULT=yes\n"), 0644)
+	if err := os.WriteFile(envFile, []byte("TEST_DOTENV_DEFAULT=yes\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	origDir, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(origDir)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
 
 	err := Load()
 	if err != nil {
