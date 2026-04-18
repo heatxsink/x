@@ -26,7 +26,7 @@ func New(name string) (*Paths, error) {
 		return nil, err
 	}
 	p.LogPath = filepath.Dir(p.LogFilename)
-	err = os.MkdirAll(p.LogPath, 0o750)
+	err = os.MkdirAll(p.LogPath, 0o700)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func New(name string) (*Paths, error) {
 		return nil, err
 	}
 	p.ConfigPath = filepath.Dir(p.ConfigFilename)
-	err = os.MkdirAll(p.ConfigPath, 0o750)
+	err = os.MkdirAll(p.ConfigPath, 0o700)
 	if err != nil {
 		return nil, err
 	}
