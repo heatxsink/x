@@ -2,14 +2,14 @@ package manifest
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
-	"github.com/heatxsink/x/gcs"
+	"github.com/heatxsink/x/exp/storage"
 )
 
 var (
@@ -19,7 +19,7 @@ var (
 
 type Manifest struct {
 	startDate string
-	bucket    string
+	baseURI   string
 }
 
 type Item struct {
@@ -39,9 +39,9 @@ func (v Version) String() string {
 }
 
 func createHash() string {
-	md5 := md5.New()
-	_, _ = io.WriteString(md5, time.Now().UTC().String())
-	return strings.ToUpper(fmt.Sprintf("%x", md5.Sum(nil)))
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return strings.ToUpper(hex.EncodeToString(b))
 }
 
 func (m *Manifest) daysSince() int {
@@ -50,11 +50,17 @@ func (m *Manifest) daysSince() int {
 	return int(elapsed.Hours()) / 24
 }
 
-func New(bucket string, startDate string) *Manifest {
+// New returns a Manifest rooted at baseURI. baseURI must be a storage URI
+// that exp/storage understands (gs://bucket or file:///path).
+func New(baseURI string, startDate string) *Manifest {
 	return &Manifest{
 		startDate: startDate,
-		bucket:    bucket,
+		baseURI:   baseURI,
 	}
+}
+
+func joinURI(base, key string) string {
+	return strings.TrimSuffix(base, "/") + "/" + key
 }
 
 func (m *Manifest) Init(ctx context.Context) (*Item, []*Item, error) {
@@ -88,13 +94,12 @@ func (m *Manifest) Init(ctx context.Context) (*Item, []*Item, error) {
 }
 
 func (m *Manifest) Load(ctx context.Context) ([]*Item, error) {
-	var items []*Item
-	data, err := gcs.Get(ctx, m.bucket, manifestKey)
+	data, err := storage.Get(ctx, joinURI(m.baseURI, manifestKey))
 	if err != nil {
 		return nil, err
 	}
-	err = json.Unmarshal(data, &items)
-	if err != nil {
+	var items []*Item
+	if err := json.Unmarshal(data, &items); err != nil {
 		return nil, err
 	}
 	return items, nil
@@ -105,31 +110,26 @@ func (m *Manifest) Save(ctx context.Context, items []*Item) error {
 	if err != nil {
 		return err
 	}
-	return gcs.PutBytes(ctx, m.bucket, manifestKey, data, "application/json")
+	return storage.PutBytes(ctx, joinURI(m.baseURI, manifestKey), data, "application/json")
 }
 
 func (m *Manifest) Clean(ctx context.Context, items []*Item, allowed []string) error {
-	keys, err := gcs.List(ctx, m.bucket)
+	objs, err := storage.List(ctx, m.baseURI)
 	if err != nil {
 		return err
 	}
-	ps := getPrefixes(items, allowed)
-	var saveThese []string
-	for _, k := range keys {
-		for _, p := range ps {
-			if strings.HasPrefix(k.Name, p) {
-				saveThese = append(saveThese, k.Name)
-				break
-			}
-		}
+	prefixes := getPrefixes(items, allowed)
+	fullPrefixes := make([]string, len(prefixes))
+	for i, p := range prefixes {
+		fullPrefixes[i] = joinURI(m.baseURI, p)
 	}
-	for _, k := range keys {
-		if !stringInSlice(k.Name, saveThese) {
-			fmt.Printf("-")
-			err := gcs.Delete(ctx, m.bucket, k.Name)
-			if err != nil {
-				fmt.Println("gcs.Delete(): ", err)
-			}
+	for _, obj := range objs {
+		if matchesAny(obj.URI, fullPrefixes) {
+			continue
+		}
+		fmt.Printf("-")
+		if err := storage.Delete(ctx, obj.URI); err != nil {
+			fmt.Println("storage.Delete(): ", err)
 		}
 	}
 	fmt.Println()
@@ -145,9 +145,9 @@ func getPrefixes(items []*Item, allowed []string) []string {
 	return ps
 }
 
-func stringInSlice(a string, list []string) bool {
-	for _, b := range list {
-		if b == a {
+func matchesAny(uri string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(uri, p) {
 			return true
 		}
 	}
