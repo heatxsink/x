@@ -11,7 +11,11 @@ import (
 
 func newTestManifest(t *testing.T) *Manifest {
 	t.Helper()
-	return New("mem://"+t.Name(), "2024-01-01")
+	m, err := New("mem://"+t.Name(), "2024-01-01")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return m
 }
 
 func TestSaveLoadRoundTrip(t *testing.T) {
@@ -52,7 +56,10 @@ func TestLoadMissingManifest(t *testing.T) {
 
 func TestClean(t *testing.T) {
 	baseURI := "mem://" + t.Name()
-	m := New(baseURI, "2024-01-01")
+	m, err := New(baseURI, "2024-01-01")
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx := context.Background()
 
 	seed := []string{
@@ -111,12 +118,15 @@ func TestInitOnEmptyReturnsErrNotExist(t *testing.T) {
 
 func TestInitOnEmptyManifestJSONReturnsErrNotExist(t *testing.T) {
 	baseURI := "mem://" + t.Name()
-	m := New(baseURI, "2024-01-01")
+	m, err := New(baseURI, "2024-01-01")
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx := context.Background()
 	if err := m.Save(ctx, nil); err != nil {
 		t.Fatalf("Save empty: %v", err)
 	}
-	_, _, err := m.Init(ctx)
+	_, _, err = m.Init(ctx)
 	if !errors.Is(err, storage.ErrNotExist) {
 		t.Fatalf("Init on empty manifest.json: err = %v, want ErrNotExist", err)
 	}
@@ -126,6 +136,23 @@ func TestVersionString(t *testing.T) {
 	v := Version{Major: 1, Minor: 23, Point: 4}
 	if got := v.String(); got != "1.23.4" {
 		t.Fatalf("Version.String = %q, want %q", got, "1.23.4")
+	}
+}
+
+func TestNewRejectsInvalidStartDate(t *testing.T) {
+	_, err := New("mem://"+t.Name(), "not-a-date")
+	if err == nil {
+		t.Fatal("expected error for invalid startDate, got nil")
+	}
+}
+
+func TestCleanHonorsContextCancellation(t *testing.T) {
+	m := newTestManifest(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := m.Clean(ctx, nil, nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Clean on cancelled ctx: err = %v, want context.Canceled", err)
 	}
 }
 

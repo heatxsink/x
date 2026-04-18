@@ -21,8 +21,8 @@ var (
 )
 
 type Manifest struct {
-	startDate string
-	baseURI   string
+	start   time.Time
+	baseURI string
 }
 
 type Item struct {
@@ -41,6 +41,8 @@ func (v Version) String() string {
 	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Point)
 }
 
+// hashCounter guarantees intra-process uniqueness in createHash even when
+// two goroutines sample time.Now() at the same resolution tick.
 var hashCounter atomic.Uint64
 
 func createHash() string {
@@ -51,18 +53,19 @@ func createHash() string {
 }
 
 func (m *Manifest) daysSince() int {
-	start, _ := time.Parse("2006-01-02", m.startDate)
-	elapsed := time.Since(start)
-	return int(elapsed.Hours()) / 24
+	return int(time.Since(m.start).Hours()) / 24
 }
 
 // New returns a Manifest rooted at baseURI. baseURI must be a storage URI
-// that exp/storage understands (gs://bucket or file:///path).
-func New(baseURI string, startDate string) *Manifest {
-	return &Manifest{
-		startDate: startDate,
-		baseURI:   baseURI,
+// that exp/storage understands (gs://bucket, file:///path, or mem://ns).
+// startDate must be a YYYY-MM-DD string; a parse failure returns an error
+// instead of silently producing garbage Minor version numbers.
+func New(baseURI string, startDate string) (*Manifest, error) {
+	t, err := time.Parse("2006-01-02", startDate)
+	if err != nil {
+		return nil, fmt.Errorf("manifest: parse startDate %q: %w", startDate, err)
 	}
+	return &Manifest{start: t, baseURI: baseURI}, nil
 }
 
 func joinURI(base, key string) string {
@@ -134,6 +137,10 @@ func (m *Manifest) Clean(ctx context.Context, items []*Item, allowed []string) e
 	}
 	var errs []error
 	for _, obj := range objs {
+		if err := ctx.Err(); err != nil {
+			errs = append(errs, err)
+			break
+		}
 		if matchesAny(obj.URI, fullPrefixes) {
 			continue
 		}

@@ -39,6 +39,9 @@ func memKey(uri string) (string, error) {
 	if u.Scheme != "mem" {
 		return "", fmt.Errorf("%w: expected mem scheme, got %q", ErrInvalidURI, u.Scheme)
 	}
+	if u.Host == "" && u.Path == "" {
+		return "", fmt.Errorf("%w: empty mem uri", ErrInvalidURI)
+	}
 	return (&url.URL{Scheme: "mem", Host: u.Host, Path: u.Path}).String(), nil
 }
 

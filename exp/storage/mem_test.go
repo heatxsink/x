@@ -103,6 +103,13 @@ func TestMemStoreListPrefix(t *testing.T) {
 	}
 }
 
+func TestMemKeyRejectsEmpty(t *testing.T) {
+	_, err := memKey("mem://")
+	if !errors.Is(err, ErrInvalidURI) {
+		t.Fatalf("memKey(\"mem://\") err = %v, want ErrInvalidURI", err)
+	}
+}
+
 func TestMemStoreIsolatedByNamespace(t *testing.T) {
 	m := newMemStore()
 	ctx := context.Background()
