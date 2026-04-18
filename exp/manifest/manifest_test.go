@@ -58,9 +58,11 @@ func TestClean(t *testing.T) {
 	seed := []string{
 		"/KEEP/a.html",
 		"/KEEP/b.html",
+		"/KEEPER/x.html", // neighboring prefix — must be deleted, not kept
 		"/DROP/c.html",
 		"/DROP/d.html",
 		"/manifest.json",
+		"/manifest.json.bak", // must be deleted; allowed entry should exact-match
 	}
 	for _, k := range seed {
 		if err := storage.PutBytes(ctx, baseURI+k, []byte("x"), ""); err != nil {
@@ -87,10 +89,36 @@ func TestClean(t *testing.T) {
 			t.Errorf("expected %q to remain, gone", w)
 		}
 	}
-	for _, d := range []string{baseURI + "/DROP/c.html", baseURI + "/DROP/d.html"} {
+	for _, d := range []string{
+		baseURI + "/KEEPER/x.html",
+		baseURI + "/DROP/c.html",
+		baseURI + "/DROP/d.html",
+		baseURI + "/manifest.json.bak",
+	} {
 		if remaining[d] {
 			t.Errorf("expected %q to be deleted, still present", d)
 		}
+	}
+}
+
+func TestInitOnEmptyReturnsErrNotExist(t *testing.T) {
+	m := newTestManifest(t)
+	_, _, err := m.Init(context.Background())
+	if !errors.Is(err, storage.ErrNotExist) {
+		t.Fatalf("Init on empty baseURI: err = %v, want ErrNotExist", err)
+	}
+}
+
+func TestInitOnEmptyManifestJSONReturnsErrNotExist(t *testing.T) {
+	baseURI := "mem://" + t.Name()
+	m := New(baseURI, "2024-01-01")
+	ctx := context.Background()
+	if err := m.Save(ctx, nil); err != nil {
+		t.Fatalf("Save empty: %v", err)
+	}
+	_, _, err := m.Init(ctx)
+	if !errors.Is(err, storage.ErrNotExist) {
+		t.Fatalf("Init on empty manifest.json: err = %v, want ErrNotExist", err)
 	}
 }
 

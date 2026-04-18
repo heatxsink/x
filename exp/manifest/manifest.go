@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -73,6 +74,9 @@ func (m *Manifest) Init(ctx context.Context) (*Item, []*Item, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading manifest: %w", err)
 	}
+	if len(ii) == 0 {
+		return nil, nil, fmt.Errorf("loading manifest: %w", storage.ErrNotExist)
+	}
 	oldMinor := ii[len(ii)-1].Version.Minor
 	point := ii[len(ii)-1].Version.Point + 1
 	minor := m.daysSince()
@@ -128,17 +132,16 @@ func (m *Manifest) Clean(ctx context.Context, items []*Item, allowed []string) e
 	for i, p := range prefixes {
 		fullPrefixes[i] = joinURI(m.baseURI, p)
 	}
+	var errs []error
 	for _, obj := range objs {
 		if matchesAny(obj.URI, fullPrefixes) {
 			continue
 		}
-		fmt.Printf("-")
 		if err := storage.Delete(ctx, obj.URI); err != nil {
-			fmt.Println("storage.Delete(): ", err)
+			errs = append(errs, fmt.Errorf("delete %q: %w", obj.URI, err))
 		}
 	}
-	fmt.Println()
-	return nil
+	return errors.Join(errs...)
 }
 
 func getPrefixes(items []*Item, allowed []string) []string {
@@ -150,9 +153,13 @@ func getPrefixes(items []*Item, allowed []string) []string {
 	return ps
 }
 
+// matchesAny reports whether uri equals one of the prefixes exactly
+// (file-shaped allowed entries like "manifest.json") or sits under one as
+// a directory prefix. The explicit "/" boundary avoids false matches
+// between "KEEP" and "KEEPER"-style neighboring prefixes.
 func matchesAny(uri string, prefixes []string) bool {
 	for _, p := range prefixes {
-		if strings.HasPrefix(uri, p) {
+		if uri == p || strings.HasPrefix(uri, p+"/") {
 			return true
 		}
 	}
