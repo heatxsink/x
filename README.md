@@ -47,8 +47,10 @@ err := dotenv.Overload(".env.local")
 envMap, err := dotenv.Read(".env")
 ```
 
-### `gcs/` - Google Cloud Storage
-Utilities for interacting with Google Cloud Storage buckets and objects.
+### `gcs/` - Google Cloud Storage (deprecated)
+Thin wrapper around `cloud.google.com/go/storage` for bucket and object operations.
+
+**Deprecated** in favor of `exp/storage` with `gs://bucket/key` URIs. The new package pools the GCS client across calls and lets callers swap to local filesystem or in-memory backends without changing call sites. See the Deprecations section below.
 
 ### `gravatar/` - Gravatar Integration
 Full Gravatar URL API client with functional options pattern. Supports avatar images, profile URLs (JSON/XML/VCF), and QR codes.
@@ -153,6 +155,45 @@ if err != nil {
 
 ### `discord/` - Discord Bot Utilities
 Discord bot integration utilities for creating and managing Discord bots.
+
+### `epub/` - EPUB Metadata
+EPUB metadata parsing, cover image extraction, and word counting. Parses OPF metadata directly instead of relying on third-party libraries that panic on optional-element gaps. Supports EPUB 2, EPUB 3, and Calibre custom metadata.
+
+**Features:**
+- `Metadata`: title, authors, ISBN, publisher, subjects, description, language, series, edition, publish date
+- Cover image extraction
+- Word-count estimation across spine items
+
+### `storage/` - URI-Addressable Blob Storage
+URI-dispatched `Store` abstraction over three backends: Google Cloud Storage, local filesystem, and an in-memory store for tests. Callers switch backends by changing a URI; the surface never exposes backend-specific types.
+
+**Schemes:**
+- `gs://bucket/key` - Google Cloud Storage, with a lazily-initialized `*storage.Client` reused across calls via `sync.Once` and package-level memoization.
+- `file:///abs/path` - Local filesystem. Preserves `ContentType` via a `<path>.meta.json` sidecar. Rejects path traversal (`..` / `.` segments, non-empty host, non-absolute paths). POSIX-only; Windows file URIs are not handled in this version.
+- `mem://namespace/key` - Process-global in-memory backend keyed by full URI. Intended for tests; callers isolate with a per-test namespace (e.g., `mem://<t.Name()>/...`).
+
+**Features:**
+- `Store` interface with `Get`, `PutFile`, `PutBytes`, `Delete`, `List`.
+- `For(uri)` resolves and memoizes one `Store` per scheme so the GCS HTTP/gRPC pool is reused across calls within a process.
+- Package-level helpers (`storage.Get`, `storage.PutBytes`, etc.) dispatch by URI scheme.
+- `List` returns a backend-neutral `[]Object` with `URI`, `Size`, `ContentType`, `Updated`, `Generation`, `Metageneration`.
+- Sentinels: `ErrUnsupportedScheme`, `ErrInvalidURI`, `ErrNotExist` (aliases `io/fs.ErrNotExist`).
+- Integration tests against real GCS run via `mage integration` with `STORAGE_TEST_BUCKET` and ADC.
+
+**Example:**
+```go
+// Same call, different backend — only the URI changes.
+data, err := storage.Get(ctx, "gs://my-bucket/configs/app.yaml")
+data, err := storage.Get(ctx, "file:///var/lib/myapp/configs/app.yaml")
+data, err := storage.Get(ctx, "mem://test/configs/app.yaml")
+
+// Or bind once:
+s, _ := storage.For(os.Getenv("STORAGE_URI"))
+data, err := s.Get(ctx, uri)
+
+// Detect missing objects uniformly across backends:
+if errors.Is(err, storage.ErrNotExist) { /* ... */ }
+```
 
 ### `http/` - HTTP Server Utilities
 Comprehensive HTTP server middleware and utilities.
@@ -281,7 +322,22 @@ if err != nil {
 ```
 
 ### `manifest/` - Application Manifest
-Application metadata and manifest management utilities.
+Versioned manifest storage for static-asset deploys, built on `exp/storage`. Tracks published `Item` entries (timestamp, `major.minor.point` version, content prefix) and prunes stale content prefixes.
+
+**Features:**
+- URI-based storage root — works against any `exp/storage` backend (`gs://`, `file://`, `mem://`)
+- `Save` / `Load` round-trip to `manifest.json` under the root URI
+- `Init` returns the next `Item` plus a rolling window of prior versions (returns `storage.ErrNotExist` when the manifest is missing or empty)
+- `Clean` prunes objects whose URIs don't match any current-version prefix or caller-provided allow-list; matching is exact-or-trailing-slash, not a raw `HasPrefix`
+
+**Example:**
+```go
+m := manifest.New("gs://my-bucket", "2024-01-01")
+item, history, err := m.Init(ctx)
+// ... upload assets under gs://my-bucket/<item.Prefix>/ ...
+_ = m.Save(ctx, history)
+_ = m.Clean(ctx, history, []string{"manifest.json"})
+```
 
 ### `paths/` - Path Manipulation
 Enhanced path manipulation utilities using the `xdg` module for platform-appropriate config, log, and data paths.
@@ -289,9 +345,24 @@ Enhanced path manipulation utilities using the `xdg` module for platform-appropr
 ### `pushover/` - Push Notifications
 Pushover notification service integration for sending push notifications to mobile devices.
 
+## Deprecations
+
+The following APIs are deprecated. Each continues to work; callers should migrate to the replacement.
+
+| Deprecated | Replacement | Why |
+|---|---|---|
+| `gcs` package (entire package: `Get`, `PutFile`, `PutBytes`, `Delete`, `List`) | `exp/storage` with `gs://bucket/key` URIs | URI-based dispatch, GCS client reuse, backend-neutral `List` (no `cloud.google.com/go/storage` types leak through the API) |
+| `dotenv.Exec` | `dotenv.ExecContext` | Lets the caller cancel or set a deadline on the spawned process |
+| `shell.Execute` | `shell.ExecuteContext` | Context-aware execution |
+| `shell.ExecuteWith` | `shell.ExecuteWithContext` | Context-aware execution |
+| `ssh.NewWithAgent` | `ssh.NewWithAgentContext` | Lets the caller bound the agent-socket dial |
+| `term.PasswordPrompt` | `term.PasswordPromptContext` | Returns errors instead of terminating the process; caller wires signal handling |
+
+`staticcheck` / `golangci-lint` flag calls to any of these with `SA1019`.
+
 ## Testing
 
-The repository includes comprehensive test suites for all modules. Run tests with:
+The repository includes test suites for all modules. Run tests with:
 
 ```bash
 # Run all tests
@@ -303,6 +374,18 @@ go test ./exp/logger
 
 # Run tests with verbose output
 go test -v ./...
+```
+
+### Mage targets
+
+A `magefile.go` at the repo root exposes convenience targets (requires `mage` — `go install github.com/magefile/mage@latest`):
+
+```bash
+mage test         # go test -race -count=1 ./...
+mage lint         # golangci-lint run --timeout=5m ./...
+mage sec          # gosec ./...
+mage integration  # go test -tags=integration -run=Integration ./exp/storage/...
+                  # requires STORAGE_TEST_BUCKET and Application Default Credentials
 ```
 
 ## Key Dependencies

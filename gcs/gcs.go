@@ -1,3 +1,9 @@
+// Package gcs is deprecated. Use github.com/heatxsink/x/exp/storage with
+// gs://bucket/key URIs instead. The exp/storage package pools the GCS client
+// across calls and lets callers swap to a local filesystem or in-memory
+// backend via file:///path and mem://ns/key URIs.
+//
+// Deprecated: use github.com/heatxsink/x/exp/storage.
 package gcs
 
 import (
@@ -11,6 +17,7 @@ import (
 	"google.golang.org/api/iterator"
 )
 
+// Deprecated: use storage.Get from github.com/heatxsink/x/exp/storage with a gs:// URI.
 func Get(ctx context.Context, bucket string, key string) ([]byte, error) {
 	client, err := storage.NewClient(ctx)
 	if err != nil {
@@ -31,6 +38,7 @@ func Get(ctx context.Context, bucket string, key string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Deprecated: use storage.PutFile from github.com/heatxsink/x/exp/storage with a gs:// URI.
 func PutFile(ctx context.Context, bucket, key, source string) error {
 	client, err := storage.NewClient(ctx)
 	if err != nil {
@@ -50,6 +58,7 @@ func PutFile(ctx context.Context, bucket, key, source string) error {
 	return w.Close()
 }
 
+// Deprecated: use storage.PutBytes from github.com/heatxsink/x/exp/storage with a gs:// URI.
 func PutBytes(ctx context.Context, bucket string, key string, data []byte, contentType string) error {
 	client, err := storage.NewClient(ctx)
 	if err != nil {
@@ -66,6 +75,7 @@ func PutBytes(ctx context.Context, bucket string, key string, data []byte, conte
 	return err
 }
 
+// Deprecated: use storage.Delete from github.com/heatxsink/x/exp/storage with a gs:// URI.
 func Delete(ctx context.Context, bucket string, key string) error {
 	client, err := storage.NewClient(ctx)
 	if err != nil {
@@ -76,6 +86,8 @@ func Delete(ctx context.Context, bucket string, key string) error {
 	return o.Delete(ctx)
 }
 
+// Deprecated: use storage.List from github.com/heatxsink/x/exp/storage with a gs:// URI.
+// The new List returns a backend-neutral []storage.Object instead of []*cloud.google.com/go/storage.ObjectAttrs.
 func List(ctx context.Context, bucket string) ([]*storage.ObjectAttrs, error) {
 	client, err := storage.NewClient(ctx)
 	if err != nil {
