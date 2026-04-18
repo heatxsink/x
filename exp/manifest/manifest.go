@@ -2,7 +2,7 @@ package manifest
 
 import (
 	"context"
-	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -39,9 +39,8 @@ func (v Version) String() string {
 }
 
 func createHash() string {
-	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	return strings.ToUpper(hex.EncodeToString(b))
+	sum := sha256.Sum256([]byte(time.Now().UTC().String()))
+	return strings.ToUpper(hex.EncodeToString(sum[:]))
 }
 
 func (m *Manifest) daysSince() int {
