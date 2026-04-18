@@ -100,3 +100,15 @@ func TestVersionString(t *testing.T) {
 		t.Fatalf("Version.String = %q, want %q", got, "1.23.4")
 	}
 }
+
+func TestCreateHashUnique(t *testing.T) {
+	const n = 1000
+	seen := make(map[string]struct{}, n)
+	for i := 0; i < n; i++ {
+		h := createHash()
+		if _, dup := seen[h]; dup {
+			t.Fatalf("createHash produced duplicate after %d calls: %q", i, h)
+		}
+		seen[h] = struct{}{}
+	}
+}

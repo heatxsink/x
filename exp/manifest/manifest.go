@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/heatxsink/x/exp/storage"
@@ -38,9 +40,13 @@ func (v Version) String() string {
 	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Point)
 }
 
+var hashCounter atomic.Uint64
+
 func createHash() string {
-	sum := sha256.Sum256([]byte(time.Now().UTC().String()))
-	return strings.ToUpper(hex.EncodeToString(sum[:]))
+	h := sha256.New()
+	_, _ = h.Write([]byte(time.Now().UTC().String()))
+	_, _ = h.Write([]byte(strconv.FormatUint(hashCounter.Add(1), 10)))
+	return strings.ToUpper(hex.EncodeToString(h.Sum(nil)))
 }
 
 func (m *Manifest) daysSince() int {
