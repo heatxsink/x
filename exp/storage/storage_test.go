@@ -52,3 +52,18 @@ func TestForParseError(t *testing.T) {
 		t.Fatal("expected parse error, got nil")
 	}
 }
+
+func TestResetForTest(t *testing.T) {
+	a, err := For("gs://bucket-a/key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resetForTest()
+	b, err := For("gs://bucket-a/key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == b {
+		t.Fatal("resetForTest did not create a fresh Store")
+	}
+}

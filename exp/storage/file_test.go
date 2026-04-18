@@ -128,7 +128,10 @@ func TestFileStoreGetMissing(t *testing.T) {
 		t.Fatal("expected error")
 	}
 	if !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("err = %v, want fs.ErrNotExist", err)
+		t.Fatalf("err = %v, want os.ErrNotExist", err)
+	}
+	if !errors.Is(err, ErrNotExist) {
+		t.Fatalf("err = %v, want storage.ErrNotExist", err)
 	}
 }
 
@@ -136,6 +139,7 @@ func TestPathTraversalRejected(t *testing.T) {
 	cases := []string{
 		"file:///var/data/../etc/passwd",
 		"file:///../etc/passwd",
+		"file:///foo/./bar",
 		"file://relative/path",
 		"file://",
 	}

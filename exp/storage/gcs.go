@@ -56,6 +56,9 @@ func (g *gcsStore) Get(ctx context.Context, uri string) ([]byte, error) {
 	}
 	r, err := client.Bucket(bucket).Object(key).NewReader(ctx)
 	if err != nil {
+		if errors.Is(err, gcssdk.ErrObjectNotExist) {
+			return nil, fmt.Errorf("storage: get %q: %w", uri, ErrNotExist)
+		}
 		return nil, fmt.Errorf("storage: get %q: %w", uri, err)
 	}
 	defer func() { _ = r.Close() }()
@@ -102,7 +105,6 @@ func (g *gcsStore) PutBytes(ctx context.Context, uri string, data []byte, conten
 	}
 	w := client.Bucket(bucket).Object(key).NewWriter(ctx)
 	w.ContentType = contentType
-	w.CacheControl = "private, max-age=0, no-transform"
 	if _, err := io.Copy(w, bytes.NewReader(data)); err != nil {
 		_ = w.Close()
 		return fmt.Errorf("storage: write %q: %w", uri, err)
@@ -123,6 +125,9 @@ func (g *gcsStore) Delete(ctx context.Context, uri string) error {
 		return fmt.Errorf("storage: gcs client: %w", err)
 	}
 	if err := client.Bucket(bucket).Object(key).Delete(ctx); err != nil {
+		if errors.Is(err, gcssdk.ErrObjectNotExist) {
+			return fmt.Errorf("storage: delete %q: %w", uri, ErrNotExist)
+		}
 		return fmt.Errorf("storage: delete %q: %w", uri, err)
 	}
 	return nil

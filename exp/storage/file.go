@@ -37,7 +37,7 @@ func pathFromURI(uri string) (string, error) {
 		return "", fmt.Errorf("%w: empty path in %q", ErrInvalidPath, uri)
 	}
 	for _, seg := range strings.Split(u.Path, "/") {
-		if seg == ".." {
+		if seg == ".." || seg == "." {
 			return "", fmt.Errorf("%w: %q", ErrInvalidPath, uri)
 		}
 	}
@@ -158,6 +158,9 @@ func (fileStore) List(_ context.Context, uri string) ([]Object, error) {
 	if walkErr != nil {
 		return nil, fmt.Errorf("storage: list %q: %w", uri, walkErr)
 	}
+	// Guarantee lexicographic order across backends. WalkDir already visits
+	// in lex order, but the sort makes the contract explicit and survives
+	// future WalkDir implementation changes.
 	sort.Slice(objs, func(i, j int) bool { return objs[i].URI < objs[j].URI })
 	return objs, nil
 }
