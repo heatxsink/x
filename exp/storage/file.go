@@ -1,0 +1,202 @@
+package storage
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+const sidecarSuffix = ".meta.json"
+
+type fileStore struct{}
+
+type sidecar struct {
+	ContentType string `json:"content_type,omitempty"`
+}
+
+func pathFromURI(uri string) (string, error) {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return "", fmt.Errorf("storage: parse %q: %w", uri, err)
+	}
+	if u.Scheme != "file" {
+		return "", fmt.Errorf("storage: expected file scheme, got %q", u.Scheme)
+	}
+	if u.Host != "" {
+		return "", fmt.Errorf("%w: non-empty host %q in %q", ErrInvalidURI, u.Host, uri)
+	}
+	if u.Path == "" {
+		return "", fmt.Errorf("%w: empty path in %q", ErrInvalidURI, uri)
+	}
+	for _, seg := range strings.Split(u.Path, "/") {
+		if seg == ".." || seg == "." {
+			return "", fmt.Errorf("%w: %q", ErrInvalidURI, uri)
+		}
+	}
+	p := filepath.Clean(filepath.FromSlash(u.Path))
+	if !filepath.IsAbs(p) {
+		return "", fmt.Errorf("%w: not absolute: %q", ErrInvalidURI, uri)
+	}
+	return p, nil
+}
+
+func (fileStore) Get(ctx context.Context, uri string) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	p, err := pathFromURI(uri)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(p) // #nosec G304 -- path validated by pathFromURI
+	if err != nil {
+		return nil, fmt.Errorf("storage: get %q: %w", uri, err)
+	}
+	return data, nil
+}
+
+func (fileStore) PutFile(ctx context.Context, uri, source string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	p, err := pathFromURI(uri)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
+		return fmt.Errorf("storage: mkdir for %q: %w", uri, err)
+	}
+	src, err := os.Open(source) // #nosec G304 -- source is a caller-supplied local path
+	if err != nil {
+		return fmt.Errorf("storage: open source %q: %w", source, err)
+	}
+	defer func() { _ = src.Close() }()
+	dst, err := os.Create(p) // #nosec G304 -- path validated by pathFromURI
+	if err != nil {
+		return fmt.Errorf("storage: create %q: %w", uri, err)
+	}
+	if _, err := io.Copy(dst, src); err != nil {
+		_ = dst.Close()
+		return fmt.Errorf("storage: write %q: %w", uri, err)
+	}
+	if err := dst.Close(); err != nil {
+		return fmt.Errorf("storage: close %q: %w", uri, err)
+	}
+	return nil
+}
+
+func (fileStore) PutBytes(ctx context.Context, uri string, data []byte, contentType string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	p, err := pathFromURI(uri)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
+		return fmt.Errorf("storage: mkdir for %q: %w", uri, err)
+	}
+	if err := os.WriteFile(p, data, 0o600); err != nil {
+		return fmt.Errorf("storage: write %q: %w", uri, err)
+	}
+	if contentType != "" {
+		meta, err := json.Marshal(sidecar{ContentType: contentType})
+		if err != nil {
+			return fmt.Errorf("storage: marshal sidecar for %q: %w", uri, err)
+		}
+		if err := os.WriteFile(p+sidecarSuffix, meta, 0o600); err != nil {
+			return fmt.Errorf("storage: write sidecar for %q: %w", uri, err)
+		}
+	}
+	return nil
+}
+
+func (fileStore) Delete(ctx context.Context, uri string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	p, err := pathFromURI(uri)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(p); err != nil {
+		return fmt.Errorf("storage: delete %q: %w", uri, err)
+	}
+	if err := os.Remove(p + sidecarSuffix); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("storage: delete sidecar for %q: %w", uri, err)
+	}
+	return nil
+}
+
+func (fileStore) List(ctx context.Context, uri string) ([]Object, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	root, err := pathFromURI(uri)
+	if err != nil {
+		return nil, err
+	}
+	var objs []Object
+	walkErr := filepath.WalkDir(root, func(p string, d fs.DirEntry, werr error) error {
+		if werr != nil {
+			return werr
+		}
+		if d.IsDir() || !d.Type().IsRegular() {
+			return nil
+		}
+		if strings.HasSuffix(p, sidecarSuffix) {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		objs = append(objs, Object{
+			URI:         fileURIFor(p),
+			Size:        info.Size(),
+			ContentType: readSidecar(p),
+			Updated:     info.ModTime(),
+		})
+		return nil
+	})
+	if errors.Is(walkErr, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if walkErr != nil {
+		return nil, fmt.Errorf("storage: list %q: %w", uri, walkErr)
+	}
+	// Guarantee lexicographic order across backends. WalkDir already visits
+	// in lex order, but the sort makes the contract explicit and survives
+	// future WalkDir implementation changes.
+	sort.Slice(objs, func(i, j int) bool { return objs[i].URI < objs[j].URI })
+	return objs, nil
+}
+
+// fileURIFor constructs a file:// URI for an absolute filesystem path,
+// percent-encoding any characters that would otherwise be ambiguous.
+func fileURIFor(p string) string {
+	u := url.URL{Scheme: "file", Path: filepath.ToSlash(p)}
+	return u.String()
+}
+
+func readSidecar(path string) string {
+	data, err := os.ReadFile(path + sidecarSuffix) // #nosec G304 -- path comes from filepath.WalkDir rooted at a validated prefix
+	if err != nil {
+		return ""
+	}
+	var s sidecar
+	if err := json.Unmarshal(data, &s); err != nil {
+		return ""
+	}
+	return s.ContentType
+}
+
+var _ Store = (*fileStore)(nil)
