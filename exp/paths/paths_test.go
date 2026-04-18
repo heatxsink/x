@@ -2,18 +2,29 @@ package paths
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 )
 
-func TestNewCreatesDirectoriesWithStrictMode(t *testing.T) {
+// setupHermeticHome points HOME and every XDG_*_HOME at a per-test tempdir
+// so paths.New writes stay isolated from the real user environment.
+func setupHermeticHome(t *testing.T) string {
+	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
-	// Force xdg to fall through to HOME-relative defaults.
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("XDG_DATA_HOME", "")
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("XDG_CACHE_HOME", "")
+	return tmp
+}
+
+func TestNewCreatesDirectoriesWithStrictMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits are not meaningful on Windows")
+	}
+	tmp := setupHermeticHome(t)
 
 	p, err := New("paths-test")
 	if err != nil {
@@ -35,11 +46,7 @@ func TestNewCreatesDirectoriesWithStrictMode(t *testing.T) {
 }
 
 func TestNewPopulatesFilenames(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_HOME", "")
-	t.Setenv("XDG_DATA_HOME", "")
-	t.Setenv("XDG_STATE_HOME", "")
-	t.Setenv("XDG_CACHE_HOME", "")
+	setupHermeticHome(t)
 
 	p, err := New("paths-test")
 	if err != nil {
