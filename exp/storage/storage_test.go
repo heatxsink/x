@@ -13,6 +13,7 @@ func TestFor(t *testing.T) {
 	}{
 		{"gs", "gs://bucket/key", nil},
 		{"file", "file:///tmp/x", nil},
+		{"mem", "mem://test/key", nil},
 		{"unknown", "s3://bucket/key", ErrUnsupportedScheme},
 	}
 	for _, tc := range tests {

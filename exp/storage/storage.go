@@ -1,7 +1,8 @@
 // Package storage provides a URI-addressable blob store that dispatches
-// between Google Cloud Storage (gs://bucket/key) and the local filesystem
-// (file:///abs/path). Callers switch backends by changing a URI; the
-// surface never exposes backend-specific types.
+// between Google Cloud Storage (gs://bucket/key), the local filesystem
+// (file:///abs/path), and an in-memory backend (mem://namespace/key) for
+// tests. Callers switch backends by changing a URI; the surface never
+// exposes backend-specific types.
 //
 // The file:// backend currently targets POSIX paths. Windows file URIs of
 // the form file:///C:/path are not handled in this version; support may be
@@ -108,6 +109,8 @@ func For(uri string) (Store, error) {
 		s = &gcsStore{}
 	case "file":
 		s = &fileStore{}
+	case "mem":
+		s = newMemStore()
 	default:
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedScheme, u.Scheme)
 	}
