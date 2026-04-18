@@ -53,7 +53,7 @@ func (fileStore) Get(_ context.Context, uri string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(p)
+	data, err := os.ReadFile(p) // #nosec G304 -- path validated by pathFromURI
 	if err != nil {
 		return nil, fmt.Errorf("storage: get %q: %w", uri, err)
 	}
@@ -65,15 +65,15 @@ func (fileStore) PutFile(_ context.Context, uri, source string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
 		return fmt.Errorf("storage: mkdir for %q: %w", uri, err)
 	}
-	src, err := os.Open(source)
+	src, err := os.Open(source) // #nosec G304 -- source is a caller-supplied local path
 	if err != nil {
 		return fmt.Errorf("storage: open source %q: %w", source, err)
 	}
 	defer func() { _ = src.Close() }()
-	dst, err := os.Create(p)
+	dst, err := os.Create(p) // #nosec G304 -- path validated by pathFromURI
 	if err != nil {
 		return fmt.Errorf("storage: create %q: %w", uri, err)
 	}
@@ -92,10 +92,10 @@ func (fileStore) PutBytes(_ context.Context, uri string, data []byte, contentTyp
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
 		return fmt.Errorf("storage: mkdir for %q: %w", uri, err)
 	}
-	if err := os.WriteFile(p, data, 0o644); err != nil {
+	if err := os.WriteFile(p, data, 0o600); err != nil {
 		return fmt.Errorf("storage: write %q: %w", uri, err)
 	}
 	if contentType != "" {
@@ -103,7 +103,7 @@ func (fileStore) PutBytes(_ context.Context, uri string, data []byte, contentTyp
 		if err != nil {
 			return fmt.Errorf("storage: marshal sidecar for %q: %w", uri, err)
 		}
-		if err := os.WriteFile(p+sidecarSuffix, meta, 0o644); err != nil {
+		if err := os.WriteFile(p+sidecarSuffix, meta, 0o600); err != nil {
 			return fmt.Errorf("storage: write sidecar for %q: %w", uri, err)
 		}
 	}
@@ -163,7 +163,7 @@ func (fileStore) List(_ context.Context, uri string) ([]Object, error) {
 }
 
 func readSidecar(path string) string {
-	data, err := os.ReadFile(path + sidecarSuffix)
+	data, err := os.ReadFile(path + sidecarSuffix) // #nosec G304 -- path comes from filepath.WalkDir rooted at a validated prefix
 	if err != nil {
 		return ""
 	}

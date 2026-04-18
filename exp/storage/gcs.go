@@ -75,7 +75,7 @@ func (g *gcsStore) PutFile(ctx context.Context, uri, source string) error {
 	if err != nil {
 		return fmt.Errorf("storage: gcs client: %w", err)
 	}
-	f, err := os.Open(source)
+	f, err := os.Open(source) // #nosec G304 -- source is a caller-supplied local path
 	if err != nil {
 		return fmt.Errorf("storage: open source %q: %w", source, err)
 	}
