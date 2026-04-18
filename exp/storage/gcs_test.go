@@ -4,10 +4,10 @@ import "testing"
 
 func TestSplitGS(t *testing.T) {
 	tests := []struct {
-		uri        string
-		bucket     string
-		key        string
-		wantErr    bool
+		uri     string
+		bucket  string
+		key     string
+		wantErr bool
 	}{
 		{"gs://bucket/key", "bucket", "key", false},
 		{"gs://bucket/nested/key/path.json", "bucket", "nested/key/path.json", false},
