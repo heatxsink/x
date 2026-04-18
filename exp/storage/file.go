@@ -31,24 +31,27 @@ func pathFromURI(uri string) (string, error) {
 		return "", fmt.Errorf("storage: expected file scheme, got %q", u.Scheme)
 	}
 	if u.Host != "" {
-		return "", fmt.Errorf("%w: non-empty host %q in %q", ErrInvalidPath, u.Host, uri)
+		return "", fmt.Errorf("%w: non-empty host %q in %q", ErrInvalidURI, u.Host, uri)
 	}
 	if u.Path == "" {
-		return "", fmt.Errorf("%w: empty path in %q", ErrInvalidPath, uri)
+		return "", fmt.Errorf("%w: empty path in %q", ErrInvalidURI, uri)
 	}
 	for _, seg := range strings.Split(u.Path, "/") {
 		if seg == ".." || seg == "." {
-			return "", fmt.Errorf("%w: %q", ErrInvalidPath, uri)
+			return "", fmt.Errorf("%w: %q", ErrInvalidURI, uri)
 		}
 	}
 	p := filepath.Clean(filepath.FromSlash(u.Path))
 	if !filepath.IsAbs(p) {
-		return "", fmt.Errorf("%w: not absolute: %q", ErrInvalidPath, uri)
+		return "", fmt.Errorf("%w: not absolute: %q", ErrInvalidURI, uri)
 	}
 	return p, nil
 }
 
-func (fileStore) Get(_ context.Context, uri string) ([]byte, error) {
+func (fileStore) Get(ctx context.Context, uri string) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	p, err := pathFromURI(uri)
 	if err != nil {
 		return nil, err
@@ -60,7 +63,10 @@ func (fileStore) Get(_ context.Context, uri string) ([]byte, error) {
 	return data, nil
 }
 
-func (fileStore) PutFile(_ context.Context, uri, source string) error {
+func (fileStore) PutFile(ctx context.Context, uri, source string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	p, err := pathFromURI(uri)
 	if err != nil {
 		return err
@@ -87,7 +93,10 @@ func (fileStore) PutFile(_ context.Context, uri, source string) error {
 	return nil
 }
 
-func (fileStore) PutBytes(_ context.Context, uri string, data []byte, contentType string) error {
+func (fileStore) PutBytes(ctx context.Context, uri string, data []byte, contentType string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	p, err := pathFromURI(uri)
 	if err != nil {
 		return err
@@ -110,7 +119,10 @@ func (fileStore) PutBytes(_ context.Context, uri string, data []byte, contentTyp
 	return nil
 }
 
-func (fileStore) Delete(_ context.Context, uri string) error {
+func (fileStore) Delete(ctx context.Context, uri string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	p, err := pathFromURI(uri)
 	if err != nil {
 		return err
@@ -124,7 +136,10 @@ func (fileStore) Delete(_ context.Context, uri string) error {
 	return nil
 }
 
-func (fileStore) List(_ context.Context, uri string) ([]Object, error) {
+func (fileStore) List(ctx context.Context, uri string) ([]Object, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	root, err := pathFromURI(uri)
 	if err != nil {
 		return nil, err
@@ -145,7 +160,7 @@ func (fileStore) List(_ context.Context, uri string) ([]Object, error) {
 			return err
 		}
 		objs = append(objs, Object{
-			URI:         "file://" + filepath.ToSlash(p),
+			URI:         fileURIFor(p),
 			Size:        info.Size(),
 			ContentType: readSidecar(p),
 			Updated:     info.ModTime(),
@@ -163,6 +178,13 @@ func (fileStore) List(_ context.Context, uri string) ([]Object, error) {
 	// future WalkDir implementation changes.
 	sort.Slice(objs, func(i, j int) bool { return objs[i].URI < objs[j].URI })
 	return objs, nil
+}
+
+// fileURIFor constructs a file:// URI for an absolute filesystem path,
+// percent-encoding any characters that would otherwise be ambiguous.
+func fileURIFor(p string) string {
+	u := url.URL{Scheme: "file", Path: filepath.ToSlash(p)}
+	return u.String()
 }
 
 func readSidecar(path string) string {

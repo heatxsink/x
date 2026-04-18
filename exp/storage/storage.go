@@ -28,6 +28,13 @@ type Object struct {
 	Size        int64
 	ContentType string
 	Updated     time.Time
+
+	// Generation and Metageneration are GCS-specific identifiers used for
+	// optimistic concurrency. Generation changes on every object replacement;
+	// Metageneration changes on every metadata update. Both are zero on the
+	// file:// backend.
+	Generation     int64
+	Metageneration int64
 }
 
 // Store is the URI-addressable blob interface. Both backends accept the
@@ -64,26 +71,19 @@ var (
 	// ErrUnsupportedScheme is returned by For when the URI's scheme has no backend.
 	ErrUnsupportedScheme = errors.New("storage: unsupported scheme")
 
-	// ErrInvalidPath is returned for file:// URIs that fail path validation
-	// (missing scheme path, relative path, or a "." / ".." segment).
-	ErrInvalidPath = errors.New("storage: invalid path")
+	// ErrInvalidURI is returned when a URI fails validation — missing path,
+	// missing bucket on gs://, non-absolute file:// path, or a "." / ".."
+	// segment in a file:// path.
+	ErrInvalidURI = errors.New("storage: invalid uri")
 
 	// ErrNotExist indicates that the addressed object does not exist. It
 	// aliases io/fs.ErrNotExist so callers can use errors.Is with either
 	// sentinel without importing backend-specific error types.
 	ErrNotExist = fs.ErrNotExist
 
-	storesMu sync.Mutex
+	storesMu sync.RWMutex
 	stores   = map[string]Store{}
 )
-
-// resetForTest clears the memoized Store map. Exposed for tests in this
-// package; do not call from production code.
-func resetForTest() {
-	storesMu.Lock()
-	defer storesMu.Unlock()
-	stores = map[string]Store{}
-}
 
 // For returns the Store that handles the URI's scheme. The returned Store
 // is memoized per scheme so backends can reuse clients across calls.
@@ -92,12 +92,17 @@ func For(uri string) (Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("storage: parse %q: %w", uri, err)
 	}
+	storesMu.RLock()
+	s, ok := stores[u.Scheme]
+	storesMu.RUnlock()
+	if ok {
+		return s, nil
+	}
 	storesMu.Lock()
 	defer storesMu.Unlock()
 	if s, ok := stores[u.Scheme]; ok {
 		return s, nil
 	}
-	var s Store
 	switch u.Scheme {
 	case "gs":
 		s = &gcsStore{}

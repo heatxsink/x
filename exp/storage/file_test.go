@@ -149,8 +149,8 @@ func TestPathTraversalRejected(t *testing.T) {
 			if err == nil {
 				t.Fatalf("pathFromURI(%q) = nil, want error", uri)
 			}
-			if !errors.Is(err, ErrInvalidPath) {
-				t.Fatalf("pathFromURI(%q) err = %v, want ErrInvalidPath", uri, err)
+			if !errors.Is(err, ErrInvalidURI) {
+				t.Fatalf("pathFromURI(%q) err = %v, want ErrInvalidURI", uri, err)
 			}
 		})
 	}

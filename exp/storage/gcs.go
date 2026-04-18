@@ -37,10 +37,10 @@ func splitGS(uri string) (bucket, key string, err error) {
 		return "", "", err
 	}
 	if u.Scheme != "gs" {
-		return "", "", fmt.Errorf("expected gs scheme, got %q", u.Scheme)
+		return "", "", fmt.Errorf("%w: expected gs scheme, got %q", ErrInvalidURI, u.Scheme)
 	}
 	if u.Host == "" {
-		return "", "", errors.New("missing bucket")
+		return "", "", fmt.Errorf("%w: missing bucket in %q", ErrInvalidURI, uri)
 	}
 	return u.Host, strings.TrimPrefix(u.Path, "/"), nil
 }
@@ -157,10 +157,12 @@ func (g *gcsStore) List(ctx context.Context, uri string) ([]Object, error) {
 			return nil, fmt.Errorf("storage: list %q: %w", uri, err)
 		}
 		objs = append(objs, Object{
-			URI:         "gs://" + bucket + "/" + attrs.Name,
-			Size:        attrs.Size,
-			ContentType: attrs.ContentType,
-			Updated:     attrs.Updated,
+			URI:            "gs://" + bucket + "/" + attrs.Name,
+			Size:           attrs.Size,
+			ContentType:    attrs.ContentType,
+			Updated:        attrs.Updated,
+			Generation:     attrs.Generation,
+			Metageneration: attrs.Metageneration,
 		})
 	}
 	return objs, nil
