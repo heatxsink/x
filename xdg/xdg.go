@@ -121,6 +121,15 @@ func (s *Scope) LogPath(filename string) (string, error) {
 	return filepath.Join(base, s.appPath(), filename), nil
 }
 
+// StatePath returns the full path for a state file.
+func (s *Scope) StatePath(filename string) (string, error) {
+	base, err := s.stateDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, s.appPath(), filename), nil
+}
+
 // LookupConfig returns paths to existing config files with the given name.
 func (s *Scope) LookupConfig(filename string) ([]string, error) {
 	dirs, err := s.ConfigDirs()
@@ -222,6 +231,17 @@ func (s *Scope) logDir() (string, error) {
 		return s.windowsDir("Logs")
 	default:
 		return s.xdgDir("", ".local/share", "/var/log")
+	}
+}
+
+func (s *Scope) stateDir() (string, error) {
+	switch runtime.GOOS {
+	case "darwin":
+		return s.darwinDir("Application Support")
+	case "windows":
+		return s.windowsDir("State")
+	default:
+		return s.xdgDir("XDG_STATE_HOME", ".local/state", "/var/lib")
 	}
 }
 

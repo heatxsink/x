@@ -95,6 +95,137 @@ func TestUserCacheDir(t *testing.T) {
 	}
 }
 
+func TestUserStatePath(t *testing.T) {
+	s := NewScope(User, "testapp")
+	p, err := s.StatePath("state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(p, "testapp") {
+		t.Errorf("state path should contain app name: %s", p)
+	}
+	if !strings.HasSuffix(p, "state.db") {
+		t.Errorf("state path should end with filename: %s", p)
+	}
+}
+
+func TestStatePathXDGEnvOverride(t *testing.T) {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		t.Skip("XDG env vars only apply on Linux/Unix")
+	}
+	dir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", dir)
+
+	s := NewScope(User, "testapp")
+	p, err := s.StatePath("state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := filepath.Join(dir, "testapp", "state.db")
+	if p != expected {
+		t.Errorf("state path = %q, want %q", p, expected)
+	}
+}
+
+func TestStatePathXDGEnvUnset(t *testing.T) {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		t.Skip("XDG env vars only apply on Linux/Unix")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_STATE_HOME", "")
+
+	s := NewScope(User, "testapp")
+	p, err := s.StatePath("state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := filepath.Join(home, ".local", "state", "testapp", "state.db")
+	if p != expected {
+		t.Errorf("state path = %q, want %q", p, expected)
+	}
+}
+
+func TestStatePathSystemScope(t *testing.T) {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		t.Skip("Linux-specific system path")
+	}
+	s := NewScope(System, "testapp")
+	p, err := s.StatePath("state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := "/var/lib/testapp/state.db"
+	if p != expected {
+		t.Errorf("state path = %q, want %q", p, expected)
+	}
+}
+
+func TestStatePathCustomHomeScope(t *testing.T) {
+	dir := t.TempDir()
+	s := NewCustomHomeScope(dir, "", "testapp")
+	p, err := s.StatePath("state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(p, dir) {
+		t.Errorf("state path should start with %s: %s", dir, p)
+	}
+	if !strings.Contains(p, "testapp") {
+		t.Errorf("state path should contain app name: %s", p)
+	}
+	if !strings.HasSuffix(p, "state.db") {
+		t.Errorf("state path should end with filename: %s", p)
+	}
+}
+
+func TestStatePathVendorInPath(t *testing.T) {
+	s := NewVendorScope(User, "myvendor", "myapp")
+	p, err := s.StatePath("state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(p, filepath.Join("myvendor", "myapp")) {
+		t.Errorf("state path should contain vendor/app: %s", p)
+	}
+	if !strings.HasSuffix(p, "state.db") {
+		t.Errorf("state path should end with filename: %s", p)
+	}
+}
+
+func TestStateDirReturnsExpectedBase(t *testing.T) {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		t.Skip("Linux-specific base path")
+	}
+	dir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", dir)
+
+	s := NewScope(User, "testapp")
+	base, err := s.stateDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if base != dir {
+		t.Errorf("stateDir = %q, want %q", base, dir)
+	}
+}
+
+func TestStatePathInvalidScopeType(t *testing.T) {
+	s := &Scope{Type: ScopeType(99), App: "testapp"}
+	_, err := s.StatePath("state.db")
+	if err == nil {
+		t.Error("expected error for invalid scope type")
+	}
+}
+
+func TestStatePathCustomHomeEmptyPath(t *testing.T) {
+	s := NewCustomHomeScope("", "", "testapp")
+	_, err := s.StatePath("state.db")
+	if err == nil {
+		t.Error("expected error for empty custom home")
+	}
+}
+
 func TestSystemPaths(t *testing.T) {
 	s := NewScope(System, "testapp")
 
