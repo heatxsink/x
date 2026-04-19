@@ -3,9 +3,11 @@ package webhook
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -378,5 +380,158 @@ func TestSendWithContextAndRetryWithTimeout(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "context deadline exceeded") {
 		t.Errorf("Expected timeout error, got: %v", err)
+	}
+}
+
+func TestSendWithContextAndRetry_CtxCancelDuringDelay(t *testing.T) {
+	payload := testPayload{Message: "cancel during delay", ID: 201}
+
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("Server Error"))
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Cancel shortly after the first attempt completes, while the retry loop
+	// is sleeping on the 100ms backoff. Without a ctx-aware backoff, the call
+	// would continue sleeping the full delay.
+	go func() {
+		for attempts.Load() < 1 {
+			time.Sleep(time.Millisecond)
+		}
+		time.Sleep(5 * time.Millisecond)
+		cancel()
+	}()
+
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	start := time.Now()
+	err := SendWithContextAndRetry(ctx, 5, 100*time.Millisecond, client, server.URL, nil, payload)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Expected errors.Is(err, context.Canceled), got: %v", err)
+	}
+	// First attempt + a few ms before cancel + tiny wakeup slack. Must be
+	// well under the single 100ms delay window, and far under 5*100ms.
+	if elapsed > 80*time.Millisecond {
+		t.Errorf("Expected prompt return after cancel, took %v", elapsed)
+	}
+	if got := attempts.Load(); got != 1 {
+		t.Errorf("Expected exactly 1 attempt before cancel, got %d", got)
+	}
+}
+
+func TestSendWithContextAndRetry_CtxDeadlineDuringDelay(t *testing.T) {
+	payload := testPayload{Message: "deadline during delay", ID: 202}
+
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("Server Error"))
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	start := time.Now()
+	err := SendWithContextAndRetry(ctx, 5, 100*time.Millisecond, client, server.URL, nil, payload)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("Expected errors.Is(err, context.DeadlineExceeded), got: %v", err)
+	}
+	// 5 retries * 100ms delay would be 500ms+. With a ctx-aware backoff we
+	// should return near the 150ms deadline.
+	if elapsed > 250*time.Millisecond {
+		t.Errorf("Expected return near deadline (150ms), took %v", elapsed)
+	}
+}
+
+func TestSendWithContextAndRetry_SucceedsAfterRetry(t *testing.T) {
+	payload := testPayload{Message: "succeeds after retry", ID: 203}
+
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := attempts.Add(1)
+		if n == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("Server Error"))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	delay := 20 * time.Millisecond
+	start := time.Now()
+	err := SendWithContextAndRetry(ctx, 5, delay, client, server.URL, nil, payload)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("Expected success after one retry, got: %v", err)
+	}
+	if got := attempts.Load(); got != 2 {
+		t.Errorf("Expected 2 attempts, got %d", got)
+	}
+	if elapsed < delay {
+		t.Errorf("Expected at least one %v backoff between attempts, elapsed %v", delay, elapsed)
+	}
+}
+
+func TestSendWithContextAndRetry_ExhaustsRetries(t *testing.T) {
+	payload := testPayload{Message: "exhausts retries", ID: 204}
+
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("Server Error"))
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	const retries = 4
+	err := SendWithContextAndRetry(ctx, retries, 5*time.Millisecond, client, server.URL, nil, payload)
+	if err == nil {
+		t.Fatal("Expected error after exhausting retries, got nil")
+	}
+	if got := attempts.Load(); got != int32(retries) {
+		t.Errorf("Expected %d attempts, got %d", retries, got)
+	}
+
+	// errors.Join wraps each attempt's error; Unwrap() []error exposes them.
+	u, ok := err.(interface{ Unwrap() []error })
+	if !ok {
+		t.Fatalf("Expected joined error with Unwrap() []error, got %T: %v", err, err)
+	}
+	joined := u.Unwrap()
+	if len(joined) != retries {
+		t.Errorf("Expected %d joined errors, got %d", retries, len(joined))
+	}
+	for i, e := range joined {
+		if !strings.Contains(e.Error(), "HTTP status code: 500") {
+			t.Errorf("joined[%d] = %v, want 500 status", i, e)
+		}
 	}
 }
