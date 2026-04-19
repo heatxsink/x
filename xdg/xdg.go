@@ -121,6 +121,15 @@ func (s *Scope) LogPath(filename string) (string, error) {
 	return filepath.Join(base, s.appPath(), filename), nil
 }
 
+// StatePath returns the full path for a state file.
+func (s *Scope) StatePath(filename string) (string, error) {
+	base, err := s.stateDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, s.appPath(), filename), nil
+}
+
 // LookupConfig returns paths to existing config files with the given name.
 func (s *Scope) LookupConfig(filename string) ([]string, error) {
 	dirs, err := s.ConfigDirs()
@@ -222,6 +231,27 @@ func (s *Scope) logDir() (string, error) {
 		return s.windowsDir("Logs")
 	default:
 		return s.xdgDir("", ".local/share", "/var/log")
+	}
+}
+
+// stateDir resolves the base directory for application state files.
+// On Linux this honors the XDG Base Directory Specification's
+// XDG_STATE_HOME (default $HOME/.local/state, system /var/lib).
+// macOS has no dedicated state location; "Application Support" is the
+// idiomatic home for persistent application state and matches the
+// precedent set by dataDirs, so StatePath and DataPath share that root
+// on Darwin (callers should pick distinct filenames per concern).
+// On Windows, "State" is used as a subdir of %LOCALAPPDATA% (or
+// %PROGRAMDATA% for System) to keep state separate from Cache, Config,
+// and Logs.
+func (s *Scope) stateDir() (string, error) {
+	switch runtime.GOOS {
+	case "darwin":
+		return s.darwinDir("Application Support")
+	case "windows":
+		return s.windowsDir("State")
+	default:
+		return s.xdgDir("XDG_STATE_HOME", ".local/state", "/var/lib")
 	}
 }
 
