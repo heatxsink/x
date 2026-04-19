@@ -69,7 +69,11 @@ func postWithContext(ctx context.Context, client *http.Client, url string, heade
 }
 
 func SendWithContextAndRetry(ctx context.Context, retries int, delay time.Duration, client *http.Client, url string, headers map[string]string, data interface{}) error {
-	errs := make([]error, 0, retries)
+	capHint := retries
+	if capHint < 0 {
+		capHint = 0
+	}
+	errs := make([]error, 0, capHint)
 	for i := range retries {
 		if err := ctx.Err(); err != nil {
 			errs = append(errs, err)
