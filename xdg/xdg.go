@@ -234,6 +234,16 @@ func (s *Scope) logDir() (string, error) {
 	}
 }
 
+// stateDir resolves the base directory for application state files.
+// On Linux this honors the XDG Base Directory Specification's
+// XDG_STATE_HOME (default $HOME/.local/state, system /var/lib).
+// macOS has no dedicated state location; "Application Support" is the
+// idiomatic home for persistent application state and matches the
+// precedent set by dataDirs, so StatePath and DataPath share that root
+// on Darwin (callers should pick distinct filenames per concern).
+// On Windows, "State" is used as a subdir of %LOCALAPPDATA% (or
+// %PROGRAMDATA% for System) to keep state separate from Cache, Config,
+// and Logs.
 func (s *Scope) stateDir() (string, error) {
 	switch runtime.GOOS {
 	case "darwin":

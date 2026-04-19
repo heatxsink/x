@@ -133,6 +133,8 @@ func TestStatePathXDGEnvUnset(t *testing.T) {
 	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	// Setting to "" simulates an unset variable: os.Getenv returns "" for
+	// both unset and set-to-empty, and xdgDir treats empty as unset.
 	t.Setenv("XDG_STATE_HOME", "")
 
 	s := NewScope(User, "testapp")

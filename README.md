@@ -113,12 +113,12 @@ HTTP client specifically designed for sending webhook payloads with retry logic,
 Zero-dependency application path resolver following platform conventions.
 
 **Features:**
-- XDG Base Directory spec compliance on Linux (`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, etc.)
+- XDG Base Directory spec compliance on Linux (`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, etc.)
 - macOS `~/Library/` conventions (Preferences, Application Support, Caches, Logs)
 - Windows `%LOCALAPPDATA%` / `%PROGRAMDATA%` support
 - User, System, and CustomHome scope types
 - Vendor prefix support
-- Config, Data, Cache, and Log path resolution
+- Config, Data, State, Cache, and Log path resolution
 - File lookup across priority-ordered directories
 
 **Example:**
@@ -127,6 +127,7 @@ scope := xdg.NewScope(xdg.User, "myapp")
 
 configPath, err := scope.ConfigPath("config.yaml")
 logPath, err := scope.LogPath("app.log")
+statePath, err := scope.StatePath("state.db")
 cacheDir, err := scope.CacheDir()
 
 // With vendor prefix
