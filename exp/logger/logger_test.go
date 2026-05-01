@@ -18,7 +18,7 @@ import (
 )
 
 func TestGet(t *testing.T) {
-	t.Run("stderr logger", func(t *testing.T) {
+	t.Run("stderr logger defaults to info", func(t *testing.T) {
 		logger := Get("", true)
 		if logger == nil {
 			t.Error("Expected logger, got nil")
@@ -29,12 +29,22 @@ func TestGet(t *testing.T) {
 			t.Error("Expected core, got nil")
 		}
 
-		if !core.Enabled(zapcore.DebugLevel) {
-			t.Error("Expected debug level to be enabled")
+		if core.Enabled(zapcore.DebugLevel) {
+			t.Error("Expected debug level to be disabled by default")
+		}
+		if !core.Enabled(zapcore.InfoLevel) {
+			t.Error("Expected info level to be enabled by default")
 		}
 	})
 
-	t.Run("file logger", func(t *testing.T) {
+	t.Run("stderr logger honors WithLevel", func(t *testing.T) {
+		logger := Get("", true, WithLevel(zapcore.DebugLevel))
+		if !logger.Core().Enabled(zapcore.DebugLevel) {
+			t.Error("Expected debug level to be enabled when WithLevel(DebugLevel) is passed")
+		}
+	})
+
+	t.Run("file logger defaults to info", func(t *testing.T) {
 		tempDir := t.TempDir()
 		logFile := filepath.Join(tempDir, "test.log")
 
@@ -48,8 +58,11 @@ func TestGet(t *testing.T) {
 			t.Error("Expected core, got nil")
 		}
 
-		if !core.Enabled(zapcore.DebugLevel) {
-			t.Error("Expected debug level to be enabled")
+		if core.Enabled(zapcore.DebugLevel) {
+			t.Error("Expected debug level to be disabled by default")
+		}
+		if !core.Enabled(zapcore.InfoLevel) {
+			t.Error("Expected info level to be enabled by default")
 		}
 
 		logger.Info("test message")
@@ -75,8 +88,11 @@ func TestFile(t *testing.T) {
 		t.Error("Expected core, got nil")
 	}
 
-	if !core.Enabled(zapcore.DebugLevel) {
-		t.Error("Expected debug level to be enabled")
+	if core.Enabled(zapcore.DebugLevel) {
+		t.Error("Expected debug level to be disabled by default")
+	}
+	if !core.Enabled(zapcore.InfoLevel) {
+		t.Error("Expected info level to be enabled by default")
 	}
 
 	logger.Info("test file message")
@@ -98,13 +114,16 @@ func TestStdErr(t *testing.T) {
 		t.Error("Expected core, got nil")
 	}
 
-	if !core.Enabled(zapcore.DebugLevel) {
-		t.Error("Expected debug level to be enabled")
+	if core.Enabled(zapcore.DebugLevel) {
+		t.Error("Expected debug level to be disabled by default")
+	}
+	if !core.Enabled(zapcore.InfoLevel) {
+		t.Error("Expected info level to be enabled by default")
 	}
 }
 
 func TestInitLoggerToStdErr(t *testing.T) {
-	logger := initLoggerToStdErr()
+	logger := initLoggerToStdErr(defaultConfig())
 	if logger == nil {
 		t.Error("Expected logger, got nil")
 	}
@@ -114,8 +133,8 @@ func TestInitLoggerToStdErr(t *testing.T) {
 		t.Error("Expected core, got nil")
 	}
 
-	if !core.Enabled(zapcore.DebugLevel) {
-		t.Error("Expected debug level to be enabled")
+	if core.Enabled(zapcore.DebugLevel) {
+		t.Error("Expected debug level to be disabled at default")
 	}
 
 	if !core.Enabled(zapcore.InfoLevel) {
@@ -135,7 +154,7 @@ func TestInitLoggerToFile(t *testing.T) {
 	tempDir := t.TempDir()
 	logFile := filepath.Join(tempDir, "test_init.log")
 
-	logger := initLoggerToFile(logFile)
+	logger := initLoggerToFile(logFile, defaultConfig())
 	if logger == nil {
 		t.Error("Expected logger, got nil")
 	}
@@ -145,8 +164,8 @@ func TestInitLoggerToFile(t *testing.T) {
 		t.Error("Expected core, got nil")
 	}
 
-	if !core.Enabled(zapcore.DebugLevel) {
-		t.Error("Expected debug level to be enabled")
+	if !core.Enabled(zapcore.InfoLevel) {
+		t.Error("Expected info level to be enabled")
 	}
 
 	logger.Info("test init message")
@@ -247,8 +266,8 @@ func TestFromContext(t *testing.T) {
 		if logger == nil {
 			t.Fatal("Expected fallback logger, got nil")
 		}
-		if !logger.Core().Enabled(zapcore.DebugLevel) {
-			t.Error("Expected debug level to be enabled on fallback logger")
+		if !logger.Core().Enabled(zapcore.InfoLevel) {
+			t.Error("Expected info level to be enabled on fallback logger")
 		}
 	})
 
@@ -259,8 +278,8 @@ func TestFromContext(t *testing.T) {
 		if logger == nil {
 			t.Fatal("Expected fallback logger, got nil")
 		}
-		if !logger.Core().Enabled(zapcore.DebugLevel) {
-			t.Error("Expected debug level to be enabled on fallback logger")
+		if !logger.Core().Enabled(zapcore.InfoLevel) {
+			t.Error("Expected info level to be enabled on fallback logger")
 		}
 	})
 }
@@ -304,8 +323,8 @@ func TestFromRequest(t *testing.T) {
 			t.Error("Expected core, got nil")
 		}
 
-		if !core.Enabled(zapcore.DebugLevel) {
-			t.Error("Expected debug level to be enabled on fallback logger")
+		if !core.Enabled(zapcore.InfoLevel) {
+			t.Error("Expected info level to be enabled on fallback logger")
 		}
 	})
 
@@ -324,8 +343,8 @@ func TestFromRequest(t *testing.T) {
 			t.Error("Expected core, got nil")
 		}
 
-		if !core.Enabled(zapcore.DebugLevel) {
-			t.Error("Expected debug level to be enabled on fallback logger")
+		if !core.Enabled(zapcore.InfoLevel) {
+			t.Error("Expected info level to be enabled on fallback logger")
 		}
 	})
 }
@@ -451,7 +470,7 @@ func TestLoggerLevels(t *testing.T) {
 	tempDir := t.TempDir()
 	logFile := filepath.Join(tempDir, "levels.log")
 
-	logger := File(logFile)
+	logger := File(logFile, WithLevel(zapcore.DebugLevel))
 
 	logger.Debug("debug message")
 	logger.Info("info message")
@@ -482,5 +501,33 @@ func TestLoggerLevels(t *testing.T) {
 
 	if !strings.Contains(logContent, "error message") {
 		t.Error("Expected error message in log file")
+	}
+}
+
+func TestDefaultLevelDropsDebug(t *testing.T) {
+	tempDir := t.TempDir()
+	logFile := filepath.Join(tempDir, "default_level.log")
+
+	logger := File(logFile)
+
+	logger.Debug("debug message")
+	logger.Info("info message")
+	_ = logger.Sync()
+
+	time.Sleep(100 * time.Millisecond)
+
+	content, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+
+	logContent := string(content)
+
+	if strings.Contains(logContent, "debug message") {
+		t.Error("Debug message should be filtered out at default (Info) level")
+	}
+
+	if !strings.Contains(logContent, "info message") {
+		t.Error("Info message should be present at default (Info) level")
 	}
 }
