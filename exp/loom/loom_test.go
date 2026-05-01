@@ -313,3 +313,56 @@ func TestLoom_Setup(t *testing.T) {
 		t.Error("Setup() expected error for nonexistent host, got nil")
 	}
 }
+
+func TestNewUser_SetsUserMode(t *testing.T) {
+	t.Setenv("LOOM_SSH_LOGIN", "kiosk")
+	t.Setenv("LOOM_SSH_HOSTNAME", "pi.local")
+	l, err := NewUser("hud", true)
+	if err != nil {
+		t.Fatalf("NewUser: %v", err)
+	}
+	if !l.userMode {
+		t.Error("NewUser should set userMode=true")
+	}
+	if l.serviceName != "hud" {
+		t.Errorf("serviceName = %q, want hud", l.serviceName)
+	}
+}
+
+func TestNew_DoesNotSetUserMode(t *testing.T) {
+	t.Setenv("LOOM_SSH_LOGIN", "root")
+	t.Setenv("LOOM_SSH_HOSTNAME", "host")
+	l, err := New("svc", false)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if l.userMode {
+		t.Error("New should leave userMode=false")
+	}
+}
+
+func TestPathHelpers_System(t *testing.T) {
+	l := &Loom{serviceName: "hud", userMode: false}
+	if got, want := l.systemdUnitDir(), "/etc/systemd/system"; got != want {
+		t.Errorf("systemdUnitDir() = %q, want %q", got, want)
+	}
+	if got, want := l.binPath(), "/opt/hud/bin/hud"; got != want {
+		t.Errorf("binPath() = %q, want %q", got, want)
+	}
+	if got, want := l.sudoPrefix(), "sudo "; got != want {
+		t.Errorf("sudoPrefix() = %q, want %q", got, want)
+	}
+}
+
+func TestPathHelpers_User(t *testing.T) {
+	l := &Loom{serviceName: "hud", userMode: true}
+	if got, want := l.systemdUnitDir(), "$HOME/.config/systemd/user"; got != want {
+		t.Errorf("systemdUnitDir() = %q, want %q", got, want)
+	}
+	if got, want := l.binPath(), "$HOME/.local/bin/hud"; got != want {
+		t.Errorf("binPath() = %q, want %q", got, want)
+	}
+	if l.sudoPrefix() != "" {
+		t.Errorf("sudoPrefix() should be empty in user mode, got %q", l.sudoPrefix())
+	}
+}
