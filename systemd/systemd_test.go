@@ -266,6 +266,67 @@ func TestServiceToFilePermissions(t *testing.T) {
 	}
 }
 
+func TestNewUserService(t *testing.T) {
+	s := NewUserService("hud", "/home/kiosk/hud start")
+	if s.Name != "hud" {
+		t.Errorf("Name = %q, want hud", s.Name)
+	}
+	if s.User != "" {
+		t.Errorf("User = %q, want empty (user services run as the invoking user)", s.User)
+	}
+	if s.WantedBy != "default.target" {
+		t.Errorf("WantedBy = %q, want default.target", s.WantedBy)
+	}
+	if s.Restart != "always" || s.RestartSec != 3 {
+		t.Errorf("restart defaults wrong: %q / %d", s.Restart, s.RestartSec)
+	}
+}
+
+func TestUserServiceToFileOmitsUserLine(t *testing.T) {
+	s := NewUserService("hud", "/home/kiosk/hud start")
+	tmp, err := os.CreateTemp("", "user-*.service")
+	if err != nil {
+		t.Fatalf("temp file: %v", err)
+	}
+	defer os.Remove(tmp.Name())
+	tmp.Close()
+	if err := s.ToFile(tmp.Name()); err != nil {
+		t.Fatalf("ToFile: %v", err)
+	}
+	body, err := os.ReadFile(tmp.Name())
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	got := string(body)
+	if strings.Contains(got, "User=") {
+		t.Errorf("user-service unit should not emit a User= line; got:\n%s", got)
+	}
+	if !strings.Contains(got, "WantedBy=default.target") {
+		t.Errorf("user-service unit missing WantedBy=default.target; got:\n%s", got)
+	}
+	if !strings.Contains(got, "ExecStart=/home/kiosk/hud start") {
+		t.Errorf("user-service unit missing ExecStart; got:\n%s", got)
+	}
+}
+
+func TestServiceWantedByConfigurable(t *testing.T) {
+	s := NewService("svc", "/bin/svc")
+	s.WantedBy = "graphical.target"
+	tmp, err := os.CreateTemp("", "wantedby-*.service")
+	if err != nil {
+		t.Fatalf("temp file: %v", err)
+	}
+	defer os.Remove(tmp.Name())
+	tmp.Close()
+	if err := s.ToFile(tmp.Name()); err != nil {
+		t.Fatalf("ToFile: %v", err)
+	}
+	body, _ := os.ReadFile(tmp.Name())
+	if !strings.Contains(string(body), "WantedBy=graphical.target") {
+		t.Errorf("WantedBy override not honoured; got:\n%s", body)
+	}
+}
+
 func TestServiceToFileMultipleServices(t *testing.T) {
 	services := []*Service{
 		NewService("service1", "/bin/app1"),
