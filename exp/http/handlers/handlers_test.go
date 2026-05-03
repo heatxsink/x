@@ -587,3 +587,36 @@ func TestMiddlewareChaining(t *testing.T) {
 		t.Error("Expected minified HTML content")
 	}
 }
+
+// TestAccessLog_PreservesFlusher guards against a regression where the
+// responseRecorder wrapper hides http.Flusher from SSE handlers. Without
+// the explicit Flush() delegation on responseRecorder, the type
+// assertion w.(http.Flusher) inside an AccessLog-wrapped handler fails
+// and SSE responses 500 with "streaming unsupported".
+func TestAccessLog_PreservesFlusher(t *testing.T) {
+	logCore, _ := observer.New(zapcore.InfoLevel)
+	zl := zap.New(logCore)
+
+	flushed := false
+	handler := logger.WithLogger(zl)(AccessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, ok := w.(http.Flusher)
+		if !ok {
+			t.Error("AccessLog-wrapped writer must implement http.Flusher")
+			return
+		}
+		_, _ = w.Write([]byte("hello"))
+		f.Flush()
+		flushed = true
+	})))
+
+	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if !flushed {
+		t.Fatal("handler never reached Flush call")
+	}
+	if rec.Body.String() != "hello" {
+		t.Errorf("body = %q, want %q", rec.Body.String(), "hello")
+	}
+}
