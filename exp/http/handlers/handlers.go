@@ -145,6 +145,20 @@ func (r *responseRecorder) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// Flush forwards to the wrapped writer if it implements http.Flusher,
+// so SSE handlers wrapped by AccessLog can still flush events to the
+// client. Without this method, a type assertion `w.(http.Flusher)` on
+// the recorder fails -- embedding the http.ResponseWriter interface
+// only promotes methods that exist on that interface, and Flush lives
+// on a separate http.Flusher interface. Silent no-op when the
+// underlying writer doesn't support flushing (HTTP/1.0, test
+// recorders), matching the standard library's behaviour.
+func (r *responseRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 func clientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		if ip, _, err := net.SplitHostPort(strings.TrimSpace(strings.Split(xff, ",")[0])); err == nil {
