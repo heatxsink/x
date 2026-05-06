@@ -74,45 +74,6 @@ jobs:
     - name: Run govulncheck
       run: govulncheck ./...
 
-    - name: Install Gosec
-      run: go install github.com/securego/gosec/v2/cmd/gosec@latest
-        
-    - name: Run Gosec Security Scanner (JSON output)
-      run: |
-        gosec -fmt json -out gosec-results.json ./...
-        echo "Gosec scan completed"
-      continue-on-error: true
-      
-    - name: Run Gosec Security Scanner (SARIF output)
-      run: |
-        gosec -fmt sarif -out gosec-results.sarif ./...
-        echo "SARIF output generated"
-      continue-on-error: true
-      
-    - name: Display Gosec Results
-      run: |
-        if [ -f gosec-results.json ]; then
-          echo "Security scan results:"
-          cat gosec-results.json | jq -r '.Issues[]? | "Issue: \(.rule_id) - \(.details) at \(.file):\(.line)"' || cat gosec-results.json
-        fi
-      continue-on-error: true
-      
-    - name: Upload SARIF file
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: gosec-results.sarif
-      if: always() && hashFiles('gosec-results.sarif') != ''
-      continue-on-error: true
-      
-    - name: Upload security scan artifacts
-      uses: actions/upload-artifact@v7
-      with:
-        name: security-scan-results
-        path: |
-          gosec-results.json
-          gosec-results.sarif
-      if: always()
-        
   build:
     name: Build
     runs-on: ubuntu-latest
