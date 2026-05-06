@@ -10,7 +10,7 @@ require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/fsouza/fake-gcs-server v1.54.0
 	github.com/gorilla/handlers v1.5.2
-	github.com/gregdel/pushover v1.3.1
+	github.com/gregdel/pushover v1.4.0
 	github.com/rs/cors v1.11.1
 	github.com/tdewolff/minify/v2 v2.23.1
 	go.uber.org/zap v1.27.0
