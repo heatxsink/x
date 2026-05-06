@@ -105,7 +105,7 @@ jobs:
       continue-on-error: true
       
     - name: Upload security scan artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: security-scan-results
         path: |
@@ -168,7 +168,7 @@ jobs:
         echo "COVERAGE=${COVERAGE}" >> $GITHUB_ENV
         
     - name: Upload coverage artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: coverage-report
         path: |
@@ -257,7 +257,7 @@ jobs:
         go test -bench=. -benchmem -count=3 ./... | tee benchmark.txt
         
     - name: Upload benchmark results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: benchmark-results
         path: benchmark.txt
