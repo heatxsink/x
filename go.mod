@@ -2,7 +2,7 @@ module github.com/heatxsink/x
 
 go 1.25.0
 
-toolchain go1.25.4
+toolchain go1.26.2
 
 require (
 	cloud.google.com/go/secretmanager v1.16.0
