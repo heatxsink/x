@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"bufio"
 	"bytes"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -586,6 +589,122 @@ func TestMiddlewareChaining(t *testing.T) {
 	if strings.Contains(body, "  ") {
 		t.Error("Expected minified HTML content")
 	}
+}
+
+// TestMinify_PreservesFlusher guards against the exact regression
+// that shipped in production: an SSE handler inside Minify-wrapped
+// chain type-asserts w.(http.Flusher), gets ok=false, and 500s. The
+// tdewolff/minify ResponseWriter embeds http.ResponseWriter but
+// doesn't proxy Flush(). Our minifyResponseWriter wrapper forwards
+// to the outer writer's Flush; this test locks that in.
+func TestMinify_PreservesFlusher(t *testing.T) {
+	flushed := false
+	handler := Minify(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, ok := w.(http.Flusher)
+		if !ok {
+			t.Error("Minify-wrapped writer must implement http.Flusher")
+			return
+		}
+		_, _ = w.Write([]byte("hello"))
+		f.Flush()
+		flushed = true
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	rec := &flusherRecorder{ResponseRecorder: httptest.NewRecorder()}
+	handler.ServeHTTP(rec, req)
+
+	if !flushed {
+		t.Fatal("handler never reached Flush call")
+	}
+	if !rec.flushed {
+		t.Fatal("outer Flush() was not invoked — minifyResponseWriter didn't proxy")
+	}
+}
+
+// TestMinify_PreservesHijacker mirrors PreservesFlusher for WebSocket
+// upgrades — Hijack lives on http.Hijacker and would otherwise be
+// hidden by the minify wrapper the same way Flush is.
+func TestMinify_PreservesHijacker(t *testing.T) {
+	handler := Minify(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if _, ok := w.(http.Hijacker); !ok {
+			t.Error("Minify-wrapped writer must implement http.Hijacker")
+		}
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := &hijackerRecorder{ResponseRecorder: httptest.NewRecorder()}
+	handler.ServeHTTP(rec, req)
+}
+
+// TestMinify_PreservesPusher mirrors the two above for HTTP/2 push.
+func TestMinify_PreservesPusher(t *testing.T) {
+	handler := Minify(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if _, ok := w.(http.Pusher); !ok {
+			t.Error("Minify-wrapped writer must implement http.Pusher")
+		}
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := &pusherRecorder{ResponseRecorder: httptest.NewRecorder()}
+	handler.ServeHTTP(rec, req)
+}
+
+// TestPatch_PreservesFlusher exercises the full Patch chain end-to-
+// end. Regression: an SSE handler mounted behind Patch used to see
+// ok=false on w.(http.Flusher) because Minify silently dropped
+// Flusher. This is the "did the whole assembled middleware chain
+// preserve Flusher" invariant the SSE bug lived inside of.
+func TestPatch_PreservesFlusher(t *testing.T) {
+	logCore, _ := observer.New(zapcore.InfoLevel)
+	zl := zap.New(logCore)
+
+	mux := http.NewServeMux()
+	seen := false
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		_, seen = w.(http.Flusher)
+	})
+
+	handler := logger.WithLogger(zl)(
+		Patch(mux, []string{"*"}, DefaultAllowedMethods, DefaultAllowedHeaders),
+	)
+	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	rec := &flusherRecorder{ResponseRecorder: httptest.NewRecorder()}
+	handler.ServeHTTP(rec, req)
+
+	if !seen {
+		t.Error("Patch-wrapped handler did NOT see http.Flusher — some middleware in the chain hides it")
+	}
+}
+
+// flusherRecorder wraps httptest.ResponseRecorder to also satisfy
+// http.Flusher, which the standard recorder does not. Records
+// whether Flush() was actually called so tests can assert the proxy
+// fired, not just that the type assertion succeeded.
+type flusherRecorder struct {
+	*httptest.ResponseRecorder
+	flushed bool
+}
+
+func (f *flusherRecorder) Flush() { f.flushed = true }
+
+// hijackerRecorder wraps httptest.ResponseRecorder to satisfy
+// http.Hijacker. Hijack() is only called in the negative case (when
+// the assertion should NOT succeed), so returning an error is safe.
+type hijackerRecorder struct {
+	*httptest.ResponseRecorder
+}
+
+func (h *hijackerRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return nil, nil, fmt.Errorf("test recorder: hijack not supported")
+}
+
+// pusherRecorder wraps httptest.ResponseRecorder to satisfy
+// http.Pusher.
+type pusherRecorder struct {
+	*httptest.ResponseRecorder
+}
+
+func (p *pusherRecorder) Push(string, *http.PushOptions) error {
+	return http.ErrNotSupported
 }
 
 // TestAccessLog_PreservesFlusher guards against a regression where the
