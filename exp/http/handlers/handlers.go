@@ -138,6 +138,14 @@ type minifyResponseWriter struct {
 // Flush forwards to the outer writer's Flush() when it implements
 // http.Flusher. Silent no-op otherwise, matching the standard
 // library's behaviour on writers that don't support flushing.
+//
+// Note: for minifiable content types (text/html, text/css, JS),
+// tdewolff/minify buffers until Close(), so a mid-stream Flush()
+// won't push those bytes to the client — outer.Flush() runs on
+// whatever's already been forwarded through. For streaming
+// pass-through types like text/event-stream (SSE) tdewolff doesn't
+// buffer and this works as expected. Don't try to stream
+// server-rendered HTML through Minify; use a bypass instead.
 func (m *minifyResponseWriter) Flush() {
 	if f, ok := m.outer.(http.Flusher); ok {
 		f.Flush()
