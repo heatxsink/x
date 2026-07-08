@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"bufio"
 	"compress/gzip"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -116,11 +118,65 @@ var defaultMinifier = func() *minify.M {
 	return m
 }()
 
+// minifyResponseWriter wraps the tdewolff/minify ResponseWriter so an
+// SSE (or any other flushing) handler downstream can still find an
+// http.Flusher via type assertion.
+//
+// The upstream *minify.ResponseWriter embeds http.ResponseWriter but
+// doesn't proxy the optional Flush/Hijack/Push interfaces. Handlers
+// that do `w.(http.Flusher)` inside a Minify-wrapped chain get
+// ok=false and typically 500 with "SSE not supported" (or fail to
+// upgrade to WebSocket for Hijacker). This wrapper forwards each
+// optional interface when the outer writer supports it, mirroring
+// the pattern already used by responseRecorder further down this
+// file.
+type minifyResponseWriter struct {
+	http.ResponseWriter // the tdewolff wrapper — Write / WriteHeader / Header pass through
+	outer               http.ResponseWriter
+}
+
+// Flush forwards to the outer writer's Flush() when it implements
+// http.Flusher. Silent no-op otherwise, matching the standard
+// library's behaviour on writers that don't support flushing.
+//
+// Note: for minifiable content types (text/html, text/css, JS),
+// tdewolff/minify buffers until Close(), so a mid-stream Flush()
+// won't push those bytes to the client — outer.Flush() runs on
+// whatever's already been forwarded through. For streaming
+// pass-through types like text/event-stream (SSE) tdewolff doesn't
+// buffer and this works as expected. Don't try to stream
+// server-rendered HTML through Minify; use a bypass instead.
+func (m *minifyResponseWriter) Flush() {
+	if f, ok := m.outer.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Hijack forwards to the outer writer's Hijack() when it implements
+// http.Hijacker. Errors with a clear message otherwise so WebSocket
+// upgrade attempts fail loud instead of pretending to succeed.
+func (m *minifyResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := m.outer.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, fmt.Errorf("handlers: outer ResponseWriter does not implement http.Hijacker")
+}
+
+// Push forwards to the outer writer's Push() when it implements
+// http.Pusher. Returns http.ErrNotSupported otherwise, which is the
+// documented signal callers should already handle.
+func (m *minifyResponseWriter) Push(target string, opts *http.PushOptions) error {
+	if p, ok := m.outer.(http.Pusher); ok {
+		return p.Push(target, opts)
+	}
+	return http.ErrNotSupported
+}
+
 func Minify(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mw := defaultMinifier.ResponseWriter(w, r)
 		defer mw.Close()
-		next.ServeHTTP(mw, r)
+		next.ServeHTTP(&minifyResponseWriter{ResponseWriter: mw, outer: w}, r)
 	})
 }
 
