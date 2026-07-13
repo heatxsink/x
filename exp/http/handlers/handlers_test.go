@@ -228,9 +228,10 @@ func TestRecover(t *testing.T) {
 func TestRecover_PreservesFlusher(t *testing.T) {
 	var sawFlusher bool
 	handler := Recover(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, sawFlusher = w.(http.Flusher)
-		if sawFlusher {
-			w.(http.Flusher).Flush()
+		f, ok := w.(http.Flusher)
+		sawFlusher = ok
+		if ok {
+			f.Flush()
 		}
 	}))
 

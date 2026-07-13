@@ -137,6 +137,7 @@ func Recover(next http.Handler) http.Handler {
 				// flushed can't be overwritten (silent no-op in that case).
 				if !rec.wrote {
 					http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+					return
 				}
 			}
 		}()
