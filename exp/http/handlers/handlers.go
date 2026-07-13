@@ -62,8 +62,61 @@ func CORSWithLogger(next http.Handler, allowedOrigins []string, allowedMethods [
 	})
 }
 
+// recoverRecorder tracks whether the underlying ResponseWriter has had a
+// status code sent. Used by Recover to decide whether it can safely emit a
+// 500 after a panic (only possible when headers haven't already flushed).
+type recoverRecorder struct {
+	http.ResponseWriter
+	wrote bool
+}
+
+// Compile-time interface assertions: catch a future refactor that drops
+// Flush / Hijack / Push before it becomes a runtime SSE / WebSocket / push
+// regression in downstreams.
+var (
+	_ http.Flusher  = (*recoverRecorder)(nil)
+	_ http.Hijacker = (*recoverRecorder)(nil)
+	_ http.Pusher   = (*recoverRecorder)(nil)
+)
+
+func (r *recoverRecorder) WriteHeader(code int) {
+	r.wrote = true
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *recoverRecorder) Write(b []byte) (int, error) {
+	r.wrote = true
+	return r.ResponseWriter.Write(b)
+}
+
+// Flush forwards to the wrapped writer if it implements http.Flusher, so
+// streaming handlers wrapped by Recover keep working — matches the pattern
+// used by responseRecorder and minifyResponseWriter.
+func (r *recoverRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Hijack forwards to the wrapped writer if it implements http.Hijacker.
+func (r *recoverRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := r.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, http.ErrNotSupported
+}
+
+// Push forwards to the wrapped writer if it implements http.Pusher.
+func (r *recoverRecorder) Push(target string, opts *http.PushOptions) error {
+	if p, ok := r.ResponseWriter.(http.Pusher); ok {
+		return p.Push(target, opts)
+	}
+	return http.ErrNotSupported
+}
+
 func Recover(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rec := &recoverRecorder{ResponseWriter: w}
 		defer func() {
 			if rr := recover(); rr != nil {
 				slogger := logger.FromRequest(r)
@@ -78,9 +131,17 @@ func Recover(next http.Handler) http.Handler {
 					err := errors.New("unknown panic")
 					slogger.Error("handlers.Recover(): ", zap.Error(err))
 				}
+				// If the handler hadn't emitted anything before panicking,
+				// synthesize a 500 so the client sees an error rather than
+				// the default "200 OK with empty body." Headers already
+				// flushed can't be overwritten (silent no-op in that case).
+				if !rec.wrote {
+					http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+					return
+				}
 			}
 		}()
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(rec, r)
 	})
 }
 
@@ -249,10 +310,66 @@ func AccessLog(next http.Handler) http.Handler {
 	})
 }
 
+// Patch composes the full Recover→AccessLog→Compress→Minify→CORS chain over
+// a concrete *http.ServeMux. Use PatchNoCORS for the same chain without CORS,
+// or when you need to pass an http.Handler (not *http.ServeMux) — e.g. to
+// compose with SkipPaths for streaming endpoints.
 func Patch(mux *http.ServeMux, allowedOrigins []string, allowedMethods []string, allowedHeaders []string) http.Handler {
 	return Recover(AccessLog(Compress(Minify(CORS(mux, allowedOrigins, allowedMethods, allowedHeaders)))))
 }
 
 func PatchDebug(mux *http.ServeMux, allowedOrigins []string) http.Handler {
 	return Recover(AccessLog(Dump(CORS(mux, allowedOrigins, DefaultAllowedMethods, DefaultAllowedHeaders), false)))
+}
+
+// PatchNoCORS is the same Recover→AccessLog→Compress→Minify chain as Patch
+// but without the CORS layer. For single-user / same-origin applications
+// where CORS response headers aren't needed.
+//
+// Accepts http.Handler (not *http.ServeMux specifically) so callers can
+// pre-compose their own routing, e.g. combine with SkipPaths for streaming.
+func PatchNoCORS(mux http.Handler) http.Handler {
+	return Recover(AccessLog(Compress(Minify(mux))))
+}
+
+// SkipPaths returns a handler that routes requests whose r.URL.Path exactly
+// matches one of paths to raw, and everything else to chain. Common pattern:
+// bypass Compress/Minify for Server-Sent Events or WebSocket endpoints that
+// can't tolerate buffering middleware.
+//
+// Match is exact string equality on r.URL.Path only:
+//   - No prefix matching. "/events/42" is NOT matched by "/events".
+//   - No trailing-slash normalization. "/events/" is a different key.
+//   - Not method-aware. Under Go 1.22+ mux patterns like "GET /foo" and
+//     "POST /foo", SkipPaths(_, _, "/foo") bypasses both — matching happens
+//     before the mux resolves the method. Callers wanting per-method bypass
+//     compose their own.
+//
+// Panics if chain or raw is nil — catches a programmer error at construction
+// time rather than on the first request.
+//
+// Example:
+//
+//	Handler: SkipPaths(PatchNoCORS(mux), mux, "/api/1/events", "/ws")
+func SkipPaths(chain http.Handler, raw http.Handler, paths ...string) http.Handler {
+	if chain == nil {
+		panic("handlers.SkipPaths: chain handler is nil")
+	}
+	if raw == nil {
+		panic("handlers.SkipPaths: raw handler is nil")
+	}
+	if len(paths) == 0 {
+		return chain
+	}
+	skip := make(map[string]struct{}, len(paths))
+	for _, p := range paths {
+		skip[p] = struct{}{}
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := skip[r.URL.Path]; ok {
+			raw.ServeHTTP(w, r)
+			return
+		}
+		chain.ServeHTTP(w, r)
+	})
 }

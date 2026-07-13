@@ -179,6 +179,99 @@ func TestRecover(t *testing.T) {
 			t.Errorf("Expected body 'OK', got %s", rec.Body.String())
 		}
 	})
+
+	recorded.TakeAll()
+
+	t.Run("panic before write emits 500", func(t *testing.T) {
+		handler := logger.WithLogger(testLogger)(Recover(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			panic("nothing written yet")
+		})))
+
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("Expected 500 when panic fires before any write, got %d", rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), http.StatusText(http.StatusInternalServerError)) {
+			t.Errorf("Expected default 500 body, got %q", rec.Body.String())
+		}
+	})
+
+	recorded.TakeAll()
+
+	t.Run("panic after write preserves original status", func(t *testing.T) {
+		handler := logger.WithLogger(testLogger)(Recover(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"partial":`))
+			panic("mid-write panic")
+		})))
+
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusAccepted {
+			t.Errorf("Expected 202 (already written), got %d — Recover must not overwrite flushed headers", rec.Code)
+		}
+		if rec.Body.String() != `{"partial":` {
+			t.Errorf("Expected partial body preserved, got %q", rec.Body.String())
+		}
+	})
+}
+
+// TestRecover_PreservesFlusher guards the streaming-through-Recover path:
+// a handler wrapped by Recover that asserts on http.Flusher must succeed.
+func TestRecover_PreservesFlusher(t *testing.T) {
+	var sawFlusher bool
+	handler := Recover(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, ok := w.(http.Flusher)
+		sawFlusher = ok
+		if ok {
+			f.Flush()
+		}
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if !sawFlusher {
+		t.Error("Recover hid http.Flusher — SSE / streaming handlers will break")
+	}
+}
+
+// TestRecover_PreservesHijacker guards the WebSocket-through-Recover path.
+func TestRecover_PreservesHijacker(t *testing.T) {
+	var sawHijacker bool
+	handler := Recover(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, sawHijacker = w.(http.Hijacker)
+	}))
+
+	rec := &hijackerRecorder{ResponseRecorder: httptest.NewRecorder()}
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/test", nil))
+
+	if !sawHijacker {
+		t.Error("Recover hid http.Hijacker — WebSocket upgrades will break")
+	}
+}
+
+// TestRecover_PreservesPusher guards the HTTP/2 push path through Recover.
+func TestRecover_PreservesPusher(t *testing.T) {
+	var sawPusher bool
+	handler := Recover(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, sawPusher = w.(http.Pusher)
+	}))
+
+	rec := &pusherRecorder{ResponseRecorder: httptest.NewRecorder()}
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/test", nil))
+
+	if !sawPusher {
+		t.Error("Recover hid http.Pusher — HTTP/2 server push will break")
+	}
 }
 
 func TestDump(t *testing.T) {
@@ -648,6 +741,75 @@ func TestMinify_PreservesPusher(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 }
 
+// TestMinify_PassesThroughBinary guards the invariant that Minify does not
+// mutate responses whose Content-Type isn't a known text minifier target.
+// Fonts, images, audio, and application/octet-stream must be byte-identical
+// after passing through Minify — otherwise browsers see corrupted assets
+// (a broken .woff2 falls back silently to system fonts).
+func TestMinify_PassesThroughBinary(t *testing.T) {
+	// Synthesize a "binary" payload with bytes that would otherwise look
+	// tempting to an HTML minifier: angle brackets, whitespace, comments.
+	// The point is that Content-Type gates the transform, not content.
+	binary := []byte{
+		0x00, 0x01, 0x02, 0x03, 0x89, 0xAB, 0xCD, 0xEF, // magic-byte lookalike
+		'<', '!', '-', '-', ' ', 'n', 'o', 't', ' ', 'h', 't', 'm', 'l', ' ', '-', '-', '>',
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	cases := []struct {
+		name, contentType string
+	}{
+		{"font/woff2", "font/woff2"},
+		{"image/x-icon", "image/x-icon"},
+		{"audio/mpeg", "audio/mpeg"},
+		{"application/octet-stream", "application/octet-stream"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			handler := Minify(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", c.contentType)
+				_, _ = w.Write(binary)
+			}))
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if !bytes.Equal(rec.Body.Bytes(), binary) {
+				t.Errorf("%s: Minify mutated binary payload\ngot:  %x\nwant: %x",
+					c.contentType, rec.Body.Bytes(), binary)
+			}
+		})
+	}
+}
+
+// TestPatch_500OnPanic exercises the Recover behavior change through the
+// full Patch chain (Recover→AccessLog→Compress→Minify→CORS). A panic in the
+// mux handler must still surface as 500 even though responseRecorder sits
+// between Recover and the mux — a future refactor that has AccessLog write
+// headers pre-flight would silently break the Recover 500 semantics without
+// this end-to-end guard.
+func TestPatch_500OnPanic(t *testing.T) {
+	core, _ := observer.New(zapcore.InfoLevel)
+	zl := zap.New(core)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/boom", func(w http.ResponseWriter, r *http.Request) {
+		panic("intentional test panic")
+	})
+
+	handler := logger.WithLogger(zl)(
+		Patch(mux, []string{"*"}, DefaultAllowedMethods, DefaultAllowedHeaders),
+	)
+	req := httptest.NewRequest(http.MethodGet, "/boom", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("Patch chain: status = %d, want 500 after handler panic", rec.Code)
+	}
+}
+
 // TestPatch_PreservesFlusher exercises the full Patch chain end-to-
 // end. Regression: an SSE handler mounted behind Patch used to see
 // ok=false on w.(http.Flusher) because Minify silently dropped
@@ -737,5 +899,153 @@ func TestAccessLog_PreservesFlusher(t *testing.T) {
 	}
 	if rec.Body.String() != "hello" {
 		t.Errorf("body = %q, want %q", rec.Body.String(), "hello")
+	}
+}
+
+// TestPatchNoCORS asserts the CORS-free chain composes correctly and does
+// not leak Access-Control-* headers into responses.
+func TestPatchNoCORS(t *testing.T) {
+	core, _ := observer.New(zapcore.InfoLevel)
+	zl := zap.New(core)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/hello", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("hi"))
+	})
+
+	handler := logger.WithLogger(zl)(PatchNoCORS(mux))
+	req := httptest.NewRequest(http.MethodGet, "/hello", nil)
+	req.Header.Set("Origin", "https://example.com")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want empty (PatchNoCORS should not emit CORS headers)", got)
+	}
+}
+
+// TestPatchNoCORS_PreservesFlusher — parallel to TestPatch_PreservesFlusher.
+// If any middleware in the CORS-free chain hides Flusher, SSE handlers
+// downstream would break.
+func TestPatchNoCORS_PreservesFlusher(t *testing.T) {
+	core, _ := observer.New(zapcore.InfoLevel)
+	zl := zap.New(core)
+
+	var seen bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, _ *http.Request) {
+		_, seen = w.(http.Flusher)
+	})
+
+	handler := logger.WithLogger(zl)(PatchNoCORS(mux))
+	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	rec := &flusherRecorder{ResponseRecorder: httptest.NewRecorder()}
+	handler.ServeHTTP(rec, req)
+
+	if !seen {
+		t.Error("PatchNoCORS chain hid http.Flusher from the downstream handler")
+	}
+}
+
+// TestSkipPaths asserts SSE-shape traffic bypasses the chain, everything
+// else goes through it. Uses PatchNoCORS as the "chain" and a bare mux as
+// "raw" — the exact composition hreader uses.
+func TestSkipPaths(t *testing.T) {
+	core, _ := observer.New(zapcore.InfoLevel)
+	zl := zap.New(core)
+
+	var stream *http.Request
+	var normal *http.Request
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/events", func(_ http.ResponseWriter, r *http.Request) { stream = r })
+	mux.HandleFunc("/api/data", func(_ http.ResponseWriter, r *http.Request) { normal = r })
+
+	handler := logger.WithLogger(zl)(SkipPaths(PatchNoCORS(mux), mux, "/api/events"))
+
+	t.Run("skipped path bypasses chain", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/events", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if stream == nil {
+			t.Fatal("skipped path never reached the raw handler")
+		}
+	})
+
+	t.Run("non-skipped path goes through chain", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/data", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if normal == nil {
+			t.Fatal("non-skipped path never reached the handler")
+		}
+	})
+}
+
+// TestSkipPaths_EmptyPaths — passing zero paths returns the chain unchanged.
+func TestSkipPaths_EmptyPaths(t *testing.T) {
+	sentinel := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("chain"))
+	})
+	raw := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("raw"))
+	})
+
+	handler := SkipPaths(sentinel, raw)
+	req := httptest.NewRequest(http.MethodGet, "/anything", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Body.String() != "chain" {
+		t.Errorf("body = %q, want chain — empty paths should behave as identity wrap of chain", rec.Body.String())
+	}
+}
+
+// TestSkipPaths_NilPanics asserts the constructor rejects nil handlers early.
+// Programmer errors should fail loudly at wiring time, not on the first
+// request that happens to hit a nil branch.
+func TestSkipPaths_NilPanics(t *testing.T) {
+	nonNil := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
+
+	t.Run("nil chain", func(t *testing.T) {
+		defer func() {
+			if recover() == nil {
+				t.Error("expected panic on nil chain, got no panic")
+			}
+		}()
+		_ = SkipPaths(nil, nonNil, "/x")
+	})
+
+	t.Run("nil raw", func(t *testing.T) {
+		defer func() {
+			if recover() == nil {
+				t.Error("expected panic on nil raw, got no panic")
+			}
+		}()
+		_ = SkipPaths(nonNil, nil, "/x")
+	})
+}
+
+// TestSkipPaths_ExactMatchOnly documents that matching is exact-string, not
+// prefix. Callers who want prefix routing compose their own bypass.
+func TestSkipPaths_ExactMatchOnly(t *testing.T) {
+	var chainHits, rawHits int
+	chain := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { chainHits++ })
+	raw := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { rawHits++ })
+
+	handler := SkipPaths(chain, raw, "/events")
+
+	// Prefix but not exact — must go through chain, not raw.
+	req := httptest.NewRequest(http.MethodGet, "/events/42", nil)
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	if rawHits != 0 {
+		t.Errorf("rawHits = %d, want 0 — '/events/42' is not an exact match for '/events'", rawHits)
+	}
+	if chainHits != 1 {
+		t.Errorf("chainHits = %d, want 1", chainHits)
 	}
 }
