@@ -740,6 +740,75 @@ func TestMinify_PreservesPusher(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 }
 
+// TestMinify_PassesThroughBinary guards the invariant that Minify does not
+// mutate responses whose Content-Type isn't a known text minifier target.
+// Fonts, images, audio, and application/octet-stream must be byte-identical
+// after passing through Minify — otherwise browsers see corrupted assets
+// (a broken .woff2 falls back silently to system fonts).
+func TestMinify_PassesThroughBinary(t *testing.T) {
+	// Synthesize a "binary" payload with bytes that would otherwise look
+	// tempting to an HTML minifier: angle brackets, whitespace, comments.
+	// The point is that Content-Type gates the transform, not content.
+	binary := []byte{
+		0x00, 0x01, 0x02, 0x03, 0x89, 0xAB, 0xCD, 0xEF, // magic-byte lookalike
+		'<', '!', '-', '-', ' ', 'n', 'o', 't', ' ', 'h', 't', 'm', 'l', ' ', '-', '-', '>',
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	cases := []struct {
+		name, contentType string
+	}{
+		{"font/woff2", "font/woff2"},
+		{"image/x-icon", "image/x-icon"},
+		{"audio/mpeg", "audio/mpeg"},
+		{"application/octet-stream", "application/octet-stream"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			handler := Minify(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", c.contentType)
+				_, _ = w.Write(binary)
+			}))
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if !bytes.Equal(rec.Body.Bytes(), binary) {
+				t.Errorf("%s: Minify mutated binary payload\ngot:  %x\nwant: %x",
+					c.contentType, rec.Body.Bytes(), binary)
+			}
+		})
+	}
+}
+
+// TestPatch_500OnPanic exercises the Recover behavior change through the
+// full Patch chain (Recover→AccessLog→Compress→Minify→CORS). A panic in the
+// mux handler must still surface as 500 even though responseRecorder sits
+// between Recover and the mux — a future refactor that has AccessLog write
+// headers pre-flight would silently break the Recover 500 semantics without
+// this end-to-end guard.
+func TestPatch_500OnPanic(t *testing.T) {
+	core, _ := observer.New(zapcore.InfoLevel)
+	zl := zap.New(core)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/boom", func(w http.ResponseWriter, r *http.Request) {
+		panic("intentional test panic")
+	})
+
+	handler := logger.WithLogger(zl)(
+		Patch(mux, []string{"*"}, DefaultAllowedMethods, DefaultAllowedHeaders),
+	)
+	req := httptest.NewRequest(http.MethodGet, "/boom", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("Patch chain: status = %d, want 500 after handler panic", rec.Code)
+	}
+}
+
 // TestPatch_PreservesFlusher exercises the full Patch chain end-to-
 // end. Regression: an SSE handler mounted behind Patch used to see
 // ok=false on w.(http.Flusher) because Minify silently dropped
@@ -934,6 +1003,31 @@ func TestSkipPaths_EmptyPaths(t *testing.T) {
 	}
 }
 
+// TestSkipPaths_NilPanics asserts the constructor rejects nil handlers early.
+// Programmer errors should fail loudly at wiring time, not on the first
+// request that happens to hit a nil branch.
+func TestSkipPaths_NilPanics(t *testing.T) {
+	nonNil := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {})
+
+	t.Run("nil chain", func(t *testing.T) {
+		defer func() {
+			if recover() == nil {
+				t.Error("expected panic on nil chain, got no panic")
+			}
+		}()
+		_ = SkipPaths(nil, nonNil, "/x")
+	})
+
+	t.Run("nil raw", func(t *testing.T) {
+		defer func() {
+			if recover() == nil {
+				t.Error("expected panic on nil raw, got no panic")
+			}
+		}()
+		_ = SkipPaths(nonNil, nil, "/x")
+	})
+}
+
 // TestSkipPaths_ExactMatchOnly documents that matching is exact-string, not
 // prefix. Callers who want prefix routing compose their own bypass.
 func TestSkipPaths_ExactMatchOnly(t *testing.T) {
@@ -952,47 +1046,5 @@ func TestSkipPaths_ExactMatchOnly(t *testing.T) {
 	}
 	if chainHits != 1 {
 		t.Errorf("chainHits = %d, want 1", chainHits)
-	}
-}
-
-// TestMinify_PassesThroughBinary guards the invariant that Minify does not
-// mutate responses whose Content-Type isn't a known text minifier target.
-// Fonts, images, audio, and application/octet-stream must be byte-identical
-// after passing through Minify — otherwise browsers see corrupted assets
-// (a broken .woff2 falls back silently to system fonts).
-func TestMinify_PassesThroughBinary(t *testing.T) {
-	// Synthesize a "binary" payload with bytes that would otherwise look
-	// tempting to an HTML minifier: angle brackets, whitespace, comments.
-	// The point is that Content-Type gates the transform, not content.
-	binary := []byte{
-		0x00, 0x01, 0x02, 0x03, 0x89, 0xAB, 0xCD, 0xEF, // magic-byte lookalike
-		'<', '!', '-', '-', ' ', 'n', 'o', 't', ' ', 'h', 't', 'm', 'l', ' ', '-', '-', '>',
-		0x00, 0x00, 0x00, 0x00,
-	}
-
-	cases := []struct {
-		name, contentType string
-	}{
-		{"font/woff2", "font/woff2"},
-		{"image/x-icon", "image/x-icon"},
-		{"audio/mpeg", "audio/mpeg"},
-		{"application/octet-stream", "application/octet-stream"},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			handler := Minify(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", c.contentType)
-				_, _ = w.Write(binary)
-			}))
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
-			rec := httptest.NewRecorder()
-			handler.ServeHTTP(rec, req)
-
-			if !bytes.Equal(rec.Body.Bytes(), binary) {
-				t.Errorf("%s: Minify mutated binary payload\ngot:  %x\nwant: %x",
-					c.contentType, rec.Body.Bytes(), binary)
-			}
-		})
 	}
 }

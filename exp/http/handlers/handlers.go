@@ -70,6 +70,15 @@ type recoverRecorder struct {
 	wrote bool
 }
 
+// Compile-time interface assertions: catch a future refactor that drops
+// Flush / Hijack / Push before it becomes a runtime SSE / WebSocket / push
+// regression in downstreams.
+var (
+	_ http.Flusher  = (*recoverRecorder)(nil)
+	_ http.Hijacker = (*recoverRecorder)(nil)
+	_ http.Pusher   = (*recoverRecorder)(nil)
+)
+
 func (r *recoverRecorder) WriteHeader(code int) {
 	r.wrote = true
 	r.ResponseWriter.WriteHeader(code)
@@ -300,6 +309,10 @@ func AccessLog(next http.Handler) http.Handler {
 	})
 }
 
+// Patch composes the full Recover→AccessLog→Compress→Minify→CORS chain over
+// a concrete *http.ServeMux. Use PatchNoCORS for the same chain without CORS,
+// or when you need to pass an http.Handler (not *http.ServeMux) — e.g. to
+// compose with SkipPaths for streaming endpoints.
 func Patch(mux *http.ServeMux, allowedOrigins []string, allowedMethods []string, allowedHeaders []string) http.Handler {
 	return Recover(AccessLog(Compress(Minify(CORS(mux, allowedOrigins, allowedMethods, allowedHeaders)))))
 }
@@ -323,13 +336,27 @@ func PatchNoCORS(mux http.Handler) http.Handler {
 // bypass Compress/Minify for Server-Sent Events or WebSocket endpoints that
 // can't tolerate buffering middleware.
 //
-// Match is exact string equality — no prefix matching, no trailing-slash
-// normalization. Callers with prefix routes should compose their own bypass.
+// Match is exact string equality on r.URL.Path only:
+//   - No prefix matching. "/events/42" is NOT matched by "/events".
+//   - No trailing-slash normalization. "/events/" is a different key.
+//   - Not method-aware. Under Go 1.22+ mux patterns like "GET /foo" and
+//     "POST /foo", SkipPaths(_, _, "/foo") bypasses both — matching happens
+//     before the mux resolves the method. Callers wanting per-method bypass
+//     compose their own.
+//
+// Panics if chain or raw is nil — catches a programmer error at construction
+// time rather than on the first request.
 //
 // Example:
 //
 //	Handler: SkipPaths(PatchNoCORS(mux), mux, "/api/1/events", "/ws")
 func SkipPaths(chain http.Handler, raw http.Handler, paths ...string) http.Handler {
+	if chain == nil {
+		panic("handlers.SkipPaths: chain handler is nil")
+	}
+	if raw == nil {
+		panic("handlers.SkipPaths: raw handler is nil")
+	}
 	if len(paths) == 0 {
 		return chain
 	}
