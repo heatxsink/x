@@ -12,7 +12,7 @@ require (
 	github.com/gorilla/handlers v1.5.2
 	github.com/gregdel/pushover v1.4.0
 	github.com/rs/cors v1.11.1
-	github.com/tdewolff/minify/v2 v2.24.13
+	github.com/tdewolff/minify/v2 v2.24.14
 	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/net v0.57.0
@@ -52,7 +52,7 @@ require (
 	github.com/pkg/xattr v0.4.12 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
-	github.com/tdewolff/parse/v2 v2.8.12 // indirect
+	github.com/tdewolff/parse/v2 v2.8.14 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.43.0 // indirect
