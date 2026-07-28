@@ -25,6 +25,11 @@ type memObject struct {
 	data        []byte
 	contentType string
 	updated     time.Time
+
+	// generation counts writes to this key, starting at 1. Every put —
+	// conditional or not — bumps it, so an unconditional PutBytes
+	// invalidates any generation a conditional writer is holding.
+	generation int64
 }
 
 func newMemStore() *memStore {
@@ -77,7 +82,7 @@ func (m *memStore) PutFile(ctx context.Context, uri, source string) error {
 		return fmt.Errorf("storage: open source %q: %w", source, err)
 	}
 	m.mu.Lock()
-	m.objects[k] = memObject{data: data, updated: time.Now()}
+	m.objects[k] = memObject{data: data, updated: time.Now(), generation: m.objects[k].generation + 1}
 	m.mu.Unlock()
 	return nil
 }
@@ -93,8 +98,49 @@ func (m *memStore) PutBytes(ctx context.Context, uri string, data []byte, conten
 	stored := make([]byte, len(data))
 	copy(stored, data)
 	m.mu.Lock()
-	m.objects[k] = memObject{data: stored, contentType: contentType, updated: time.Now()}
+	m.objects[k] = memObject{data: stored, contentType: contentType, updated: time.Now(), generation: m.objects[k].generation + 1}
 	m.mu.Unlock()
+	return nil
+}
+
+func (m *memStore) GetWithGeneration(ctx context.Context, uri string) ([]byte, int64, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
+	k, err := memKey(uri)
+	if err != nil {
+		return nil, 0, err
+	}
+	m.mu.RLock()
+	obj, ok := m.objects[k]
+	m.mu.RUnlock()
+	if !ok {
+		return nil, 0, fmt.Errorf("storage: get %q: %w", uri, ErrNotExist)
+	}
+	out := make([]byte, len(obj.data))
+	copy(out, obj.data)
+	return out, obj.generation, nil
+}
+
+func (m *memStore) PutBytesIfGeneration(ctx context.Context, uri string, data []byte, contentType string, ifGeneration int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	k, err := memKey(uri)
+	if err != nil {
+		return err
+	}
+	stored := make([]byte, len(data))
+	copy(stored, data)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// A missing object has generation 0, so one comparison covers both the
+	// "must not exist yet" create and the "must still match" replace.
+	cur := m.objects[k].generation
+	if cur != ifGeneration {
+		return fmt.Errorf("storage: put %q: %w", uri, ErrPreconditionFailed)
+	}
+	m.objects[k] = memObject{data: stored, contentType: contentType, updated: time.Now(), generation: cur + 1}
 	return nil
 }
 
@@ -135,10 +181,11 @@ func (m *memStore) List(ctx context.Context, uri string) ([]Object, error) {
 			Size:        int64(len(obj.data)),
 			ContentType: obj.contentType,
 			Updated:     obj.updated,
+			Generation:  obj.generation,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].URI < out[j].URI })
 	return out, nil
 }
 
-var _ Store = (*memStore)(nil)
+var _ ConditionalStore = (*memStore)(nil)
