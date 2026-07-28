@@ -12,14 +12,23 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 )
 
 const sidecarSuffix = ".meta.json"
 
-type fileStore struct{}
+// fileStore serializes writes with mu so generation reads and bumps are
+// atomic within one process. The generation itself persists in the
+// <path>.meta.json sidecar, but nothing locks the files themselves, so
+// conditional writes only guard against racing goroutines, not against a
+// second process — consistent with the backend's local-development role.
+type fileStore struct {
+	mu sync.Mutex
+}
 
 type sidecar struct {
 	ContentType string `json:"content_type,omitempty"`
+	Generation  int64  `json:"generation,omitempty"`
 }
 
 func pathFromURI(uri string) (string, error) {
@@ -48,7 +57,7 @@ func pathFromURI(uri string) (string, error) {
 	return p, nil
 }
 
-func (fileStore) Get(ctx context.Context, uri string) ([]byte, error) {
+func (f *fileStore) Get(ctx context.Context, uri string) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -63,7 +72,24 @@ func (fileStore) Get(ctx context.Context, uri string) ([]byte, error) {
 	return data, nil
 }
 
-func (fileStore) PutFile(ctx context.Context, uri, source string) error {
+func (f *fileStore) GetWithGeneration(ctx context.Context, uri string) ([]byte, int64, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
+	p, err := pathFromURI(uri)
+	if err != nil {
+		return nil, 0, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	data, err := os.ReadFile(p) // #nosec G304 -- path validated by pathFromURI
+	if err != nil {
+		return nil, 0, fmt.Errorf("storage: get %q: %w", uri, err)
+	}
+	return data, generationFor(p), nil
+}
+
+func (f *fileStore) PutFile(ctx context.Context, uri, source string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -79,6 +105,9 @@ func (fileStore) PutFile(ctx context.Context, uri, source string) error {
 		return fmt.Errorf("storage: open source %q: %w", source, err)
 	}
 	defer func() { _ = src.Close() }()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	gen := f.generationLocked(p)
 	dst, err := os.Create(p) // #nosec G304 -- path validated by pathFromURI
 	if err != nil {
 		return fmt.Errorf("storage: create %q: %w", uri, err)
@@ -90,10 +119,13 @@ func (fileStore) PutFile(ctx context.Context, uri, source string) error {
 	if err := dst.Close(); err != nil {
 		return fmt.Errorf("storage: close %q: %w", uri, err)
 	}
+	if err := f.writeSidecarLocked(p, "", gen+1); err != nil {
+		return fmt.Errorf("storage: write sidecar for %q: %w", uri, err)
+	}
 	return nil
 }
 
-func (fileStore) PutBytes(ctx context.Context, uri string, data []byte, contentType string) error {
+func (f *fileStore) PutBytes(ctx context.Context, uri string, data []byte, contentType string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -104,22 +136,19 @@ func (fileStore) PutBytes(ctx context.Context, uri string, data []byte, contentT
 	if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
 		return fmt.Errorf("storage: mkdir for %q: %w", uri, err)
 	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	gen := f.generationLocked(p)
 	if err := os.WriteFile(p, data, 0o600); err != nil {
 		return fmt.Errorf("storage: write %q: %w", uri, err)
 	}
-	if contentType != "" {
-		meta, err := json.Marshal(sidecar{ContentType: contentType})
-		if err != nil {
-			return fmt.Errorf("storage: marshal sidecar for %q: %w", uri, err)
-		}
-		if err := os.WriteFile(p+sidecarSuffix, meta, 0o600); err != nil {
-			return fmt.Errorf("storage: write sidecar for %q: %w", uri, err)
-		}
+	if err := f.writeSidecarLocked(p, contentType, gen+1); err != nil {
+		return fmt.Errorf("storage: write sidecar for %q: %w", uri, err)
 	}
 	return nil
 }
 
-func (fileStore) Delete(ctx context.Context, uri string) error {
+func (f *fileStore) PutBytesIfGeneration(ctx context.Context, uri string, data []byte, contentType string, ifGeneration int64) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -127,6 +156,35 @@ func (fileStore) Delete(ctx context.Context, uri string) error {
 	if err != nil {
 		return err
 	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	// A missing object has generation 0, so one comparison covers both the
+	// "must not exist yet" create and the "must still match" replace.
+	if f.generationLocked(p) != ifGeneration {
+		return fmt.Errorf("storage: put %q: %w", uri, ErrPreconditionFailed)
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
+		return fmt.Errorf("storage: mkdir for %q: %w", uri, err)
+	}
+	if err := os.WriteFile(p, data, 0o600); err != nil {
+		return fmt.Errorf("storage: write %q: %w", uri, err)
+	}
+	if err := f.writeSidecarLocked(p, contentType, ifGeneration+1); err != nil {
+		return fmt.Errorf("storage: write sidecar for %q: %w", uri, err)
+	}
+	return nil
+}
+
+func (f *fileStore) Delete(ctx context.Context, uri string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	p, err := pathFromURI(uri)
+	if err != nil {
+		return err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if err := os.Remove(p); err != nil {
 		return fmt.Errorf("storage: delete %q: %w", uri, err)
 	}
@@ -136,7 +194,7 @@ func (fileStore) Delete(ctx context.Context, uri string) error {
 	return nil
 }
 
-func (fileStore) List(ctx context.Context, uri string) ([]Object, error) {
+func (f *fileStore) List(ctx context.Context, uri string) ([]Object, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -159,11 +217,13 @@ func (fileStore) List(ctx context.Context, uri string) ([]Object, error) {
 		if err != nil {
 			return err
 		}
+		sc := readSidecar(p)
 		objs = append(objs, Object{
 			URI:         fileURIFor(p),
 			Size:        info.Size(),
-			ContentType: readSidecar(p),
+			ContentType: sc.ContentType,
 			Updated:     info.ModTime(),
+			Generation:  seededGeneration(sc.Generation),
 		})
 		return nil
 	})
@@ -187,16 +247,58 @@ func fileURIFor(p string) string {
 	return u.String()
 }
 
-func readSidecar(path string) string {
-	data, err := os.ReadFile(path + sidecarSuffix) // #nosec G304 -- path comes from filepath.WalkDir rooted at a validated prefix
+// generationLocked returns the current generation of the object at path:
+// the sidecar's recorded value, 1 for a pre-existing file with none, and 0
+// when the file does not exist. Callers must hold f.mu.
+func (f *fileStore) generationLocked(path string) int64 {
+	if _, err := os.Stat(path); err != nil {
+		return 0
+	}
+	return generationFor(path)
+}
+
+// generationFor returns the generation of an existing file: its sidecar's
+// recorded value, or 1 when the file predates generation tracking.
+func generationFor(path string) int64 {
+	return seededGeneration(readSidecar(path).Generation)
+}
+
+// seededGeneration maps an unrecorded generation to 1 so every existing
+// object reports a non-zero generation — 0 stays reserved for "the object
+// must not exist yet" in PutBytesIfGeneration.
+func seededGeneration(gen int64) int64 {
+	if gen == 0 {
+		return 1
+	}
+	return gen
+}
+
+// writeSidecarLocked records generation and contentType in the sidecar. An
+// empty contentType preserves the previously recorded one. Callers must
+// hold f.mu.
+func (f *fileStore) writeSidecarLocked(path, contentType string, generation int64) error {
+	sc := readSidecar(path)
+	sc.Generation = generation
+	if contentType != "" {
+		sc.ContentType = contentType
+	}
+	meta, err := json.Marshal(sc)
 	if err != nil {
-		return ""
+		return err
+	}
+	return os.WriteFile(path+sidecarSuffix, meta, 0o600)
+}
+
+func readSidecar(path string) sidecar {
+	data, err := os.ReadFile(path + sidecarSuffix) // #nosec G304 -- path comes from a validated URI or filepath.WalkDir rooted at a validated prefix
+	if err != nil {
+		return sidecar{}
 	}
 	var s sidecar
 	if err := json.Unmarshal(data, &s); err != nil {
-		return ""
+		return sidecar{}
 	}
-	return s.ContentType
+	return s
 }
 
-var _ Store = (*fileStore)(nil)
+var _ ConditionalStore = (*fileStore)(nil)

@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
 
 	gcssdk "cloud.google.com/go/storage"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 )
 
@@ -115,6 +117,68 @@ func (g *gcsStore) PutBytes(ctx context.Context, uri string, data []byte, conten
 	return nil
 }
 
+func (g *gcsStore) GetWithGeneration(ctx context.Context, uri string) ([]byte, int64, error) {
+	bucket, key, err := splitGS(uri)
+	if err != nil {
+		return nil, 0, fmt.Errorf("storage: parse %q: %w", uri, err)
+	}
+	client, err := g.getClient(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("storage: gcs client: %w", err)
+	}
+	r, err := client.Bucket(bucket).Object(key).NewReader(ctx)
+	if err != nil {
+		if errors.Is(err, gcssdk.ErrObjectNotExist) {
+			return nil, 0, fmt.Errorf("storage: get %q: %w", uri, ErrNotExist)
+		}
+		return nil, 0, fmt.Errorf("storage: get %q: %w", uri, err)
+	}
+	defer func() { _ = r.Close() }()
+	buf := bytes.NewBuffer(nil)
+	if _, err := io.Copy(buf, r); err != nil {
+		return nil, 0, fmt.Errorf("storage: read %q: %w", uri, err)
+	}
+	return buf.Bytes(), r.Attrs.Generation, nil
+}
+
+func (g *gcsStore) PutBytesIfGeneration(ctx context.Context, uri string, data []byte, contentType string, ifGeneration int64) error {
+	bucket, key, err := splitGS(uri)
+	if err != nil {
+		return fmt.Errorf("storage: parse %q: %w", uri, err)
+	}
+	client, err := g.getClient(ctx)
+	if err != nil {
+		return fmt.Errorf("storage: gcs client: %w", err)
+	}
+	cond := gcssdk.Conditions{GenerationMatch: ifGeneration}
+	if ifGeneration == 0 {
+		cond = gcssdk.Conditions{DoesNotExist: true}
+	}
+	w := client.Bucket(bucket).Object(key).If(cond).NewWriter(ctx)
+	w.ContentType = contentType
+	if _, err := io.Copy(w, bytes.NewReader(data)); err != nil {
+		_ = w.Close()
+		if isPreconditionFailed(err) {
+			return fmt.Errorf("storage: put %q: %w", uri, ErrPreconditionFailed)
+		}
+		return fmt.Errorf("storage: write %q: %w", uri, err)
+	}
+	if err := w.Close(); err != nil {
+		if isPreconditionFailed(err) {
+			return fmt.Errorf("storage: put %q: %w", uri, ErrPreconditionFailed)
+		}
+		return fmt.Errorf("storage: close %q: %w", uri, err)
+	}
+	return nil
+}
+
+// isPreconditionFailed reports whether err is GCS's HTTP 412 response — the
+// generation precondition losing the race.
+func isPreconditionFailed(err error) bool {
+	var apiErr *googleapi.Error
+	return errors.As(err, &apiErr) && apiErr.Code == http.StatusPreconditionFailed
+}
+
 func (g *gcsStore) Delete(ctx context.Context, uri string) error {
 	bucket, key, err := splitGS(uri)
 	if err != nil {
@@ -168,4 +232,4 @@ func (g *gcsStore) List(ctx context.Context, uri string) ([]Object, error) {
 	return objs, nil
 }
 
-var _ Store = (*gcsStore)(nil)
+var _ ConditionalStore = (*gcsStore)(nil)
