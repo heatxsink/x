@@ -6,7 +6,7 @@ toolchain go1.26.4
 
 require (
 	cloud.google.com/go/secretmanager v1.21.0
-	cloud.google.com/go/storage v1.64.0
+	cloud.google.com/go/storage v1.65.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/fsouza/fake-gcs-server v1.55.1
 	github.com/gorilla/handlers v1.5.2
