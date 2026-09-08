@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -519,7 +520,7 @@ func TestUploadTransfersFileContents(t *testing.T) {
 		if r.name != "payload.txt" {
 			t.Errorf("name = %q, want payload.txt", r.name)
 		}
-		if string(r.body) != string(payload) {
+		if !bytes.Equal(r.body, payload) {
 			t.Errorf("body = %q, want %q", r.body, payload)
 		}
 	case <-time.After(10 * time.Second):
