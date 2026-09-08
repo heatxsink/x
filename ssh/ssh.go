@@ -358,7 +358,9 @@ func (c *Client) uploadByReader(r io.Reader, remotePath string, size int64, perm
 			term.Errorln(fmt.Errorf("failed to copy io: %w", err))
 		}
 		_, _ = fmt.Fprintln(w, "\x00")
-		if err = pb.Close(); err != nil {
+		// Must shadow: assigning the outer err here races with the
+		// err = session.Wait() below and can mask its result.
+		if err := pb.Close(); err != nil {
 			term.Errorln(err)
 		}
 	}()
