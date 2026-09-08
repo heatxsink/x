@@ -1,6 +1,6 @@
 module github.com/heatxsink/x
 
-go 1.25.8
+go 1.26.0
 
 toolchain go1.26.4
 
@@ -14,7 +14,7 @@ require (
 	github.com/rs/cors v1.11.1
 	github.com/tdewolff/minify/v2 v2.24.17
 	go.uber.org/zap v1.28.0
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/net v0.58.0
 	golang.org/x/time v0.15.0
 	google.golang.org/api v0.293.0
