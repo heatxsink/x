@@ -138,11 +138,14 @@ func TestCommandsAreUnretainedQoS0(t *testing.T) {
 }
 
 func TestPublishFailsWhenDisconnected(t *testing.T) {
-	b := mqtttest.New(t, mqtttest.WithCredentials(testUsername, testPassword))
-	c := iot.New(b.Addr(), testUsername, "wrong-password", testClientID, true)
-	// Connect is expected to fail, leaving the client unusable.
+	// No broker: port 1 on loopback refuses immediately. Deliberately not using
+	// an embedded broker here -- a client that never connects may retry in the
+	// background, and an accept racing the broker's shutdown trips a data race
+	// inside mochi-mqtt v2.7.9 (Server.Close closes s.done while
+	// Server.NewClient reads it).
+	c := iot.New("tcp://127.0.0.1:1", testUsername, testPassword, testClientID, true)
 	if _, err := c.Connect(); err == nil {
-		t.Fatal("Connect with wrong password: err = nil, want error")
+		t.Fatal("Connect to unreachable broker: err = nil, want error")
 	}
 	ep := New(c)
 

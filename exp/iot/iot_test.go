@@ -76,8 +76,26 @@ func TestConnectWrongCredentials(t *testing.T) {
 	if _, err := c.Connect(); err == nil {
 		t.Fatal("Connect with wrong password: err = nil, want error")
 	}
+	// Stop the client before the broker is torn down: a lingering reconnect
+	// attempt accepted during shutdown trips a data race inside mochi-mqtt
+	// v2.7.9 (Server.Close closes s.done while Server.NewClient reads it).
+	c.client.Disconnect(0)
+
 	if c.client.IsConnected() {
 		t.Error("IsConnected = true after a rejected Connect")
+	}
+	// The broker saw and rejected the attempt. paho retries a rejected CONNECT,
+	// so the count is not fixed -- assert only that every attempt it made
+	// carried the credentials under test.
+	attempts := b.AuthAttempts()
+	if len(attempts) == 0 {
+		t.Fatal("broker recorded no authentication attempts")
+	}
+	for i, a := range attempts {
+		if a.Username != testUsername || a.Password != "wrong-password" {
+			t.Errorf("attempt %d = %+v, want username %q with the wrong password",
+				i, a, testUsername)
+		}
 	}
 }
 

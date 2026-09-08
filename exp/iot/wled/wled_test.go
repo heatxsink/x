@@ -176,10 +176,10 @@ func TestPulseNZeroOnlyTurnsOn(t *testing.T) {
 }
 
 func TestCommandsFailWhenDisconnected(t *testing.T) {
-	b := mqtttest.New(t, mqtttest.WithCredentials(testUsername, testPassword))
-	c := iot.New(b.Addr(), testUsername, "wrong-password", testClientID, true)
+	// No broker; see the note in ezplug's TestPublishFailsWhenDisconnected.
+	c := iot.New("tcp://127.0.0.1:1", testUsername, testPassword, testClientID, true)
 	if _, err := c.Connect(); err == nil {
-		t.Fatal("Connect with wrong password: err = nil, want error")
+		t.Fatal("Connect to unreachable broker: err = nil, want error")
 	}
 	w := New(c)
 
