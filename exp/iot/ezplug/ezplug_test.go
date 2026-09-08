@@ -1,73 +1,152 @@
 package ezplug
 
 import (
-	"os"
 	"testing"
 	"time"
 
 	"github.com/heatxsink/x/exp/iot"
+	"github.com/heatxsink/x/exp/iot/internal/mqtttest"
 )
 
-// TODO: Need to make these an env var OR mock?
-var (
-	brokerAddr   = "tcp://10.0.13.1:1883"
-	username     = "dyoru8xjr89zzydf8kmo"
-	password     = "dqd2a3b1ikdximbe9y5w"
-	clientID     = "ezplug-tests"
-	iotClient    *iot.IoT
-	ep           *EzPlug
+const (
+	testUsername = "test-user"
+	testPassword = "test-password"
+	testClientID = "ezplug-tests"
 	testEzPlugID = "35ECE9"
-	testTopic    string
 )
 
-func TestSetup(t *testing.T) {
-	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
-		t.Skip("Skipping test: MQTT broker not available in CI environment")
+// newEzPlug returns an EzPlug wired to an embedded broker, plus that broker so
+// the caller can assert on what was published.
+func newEzPlug(t *testing.T) (*EzPlug, *mqtttest.Broker) {
+	t.Helper()
+	b := mqtttest.New(t, mqtttest.WithCredentials(testUsername, testPassword))
+	c := iot.New(b.Addr(), testUsername, testPassword, testClientID, true)
+	if _, err := c.Connect(); err != nil {
+		t.Fatalf("Connect: %v", err)
 	}
-	iotClient = iot.New(brokerAddr, username, password, clientID, false)
-	_, err := iotClient.Connect()
-	if err != nil {
-		t.Skip("Skipping test: MQTT broker not available -", err)
-	}
-	ep = New(iotClient)
-	testTopic = ep.Topic(testEzPlugID)
+	return New(c), b
 }
 
-func TestOnOff(t *testing.T) {
-	if ep == nil {
-		t.Skip("Skipping test: EzPlug client not initialized")
+func TestTopic(t *testing.T) {
+	ep := New(nil)
+
+	if got, want := ep.Topic(testEzPlugID), "cmnd/EZPlug_35ECE9/Power"; got != want {
+		t.Errorf("Topic(%q) = %q, want %q", testEzPlugID, got, want)
 	}
-	d := time.Second * 5
-	if err := ep.On(testTopic); err != nil {
-		t.Error(err)
+}
+
+func TestTopicEmptyID(t *testing.T) {
+	ep := New(nil)
+
+	if got, want := ep.Topic(""), "cmnd/EZPlug_/Power"; got != want {
+		t.Errorf("Topic(\"\") = %q, want %q", got, want)
 	}
-	time.Sleep(d)
-	if err := ep.Off(testTopic); err != nil {
-		t.Error(err)
+}
+
+func TestOn(t *testing.T) {
+	ep, b := newEzPlug(t)
+	topic := ep.Topic(testEzPlugID)
+
+	if err := ep.On(topic); err != nil {
+		t.Fatalf("On: %v", err)
 	}
-	time.Sleep(d)
-	if err := ep.On(testTopic); err != nil {
-		t.Error(err)
+
+	msgs := b.WaitForTopic(t, topic, 1, 5*time.Second)
+	if msgs[0].Payload != On {
+		t.Errorf("payload = %q, want %q", msgs[0].Payload, On)
+	}
+}
+
+func TestOff(t *testing.T) {
+	ep, b := newEzPlug(t)
+	topic := ep.Topic(testEzPlugID)
+
+	if err := ep.Off(topic); err != nil {
+		t.Fatalf("Off: %v", err)
+	}
+
+	msgs := b.WaitForTopic(t, topic, 1, 5*time.Second)
+	if msgs[0].Payload != Off {
+		t.Errorf("payload = %q, want %q", msgs[0].Payload, Off)
 	}
 }
 
 func TestToggle(t *testing.T) {
-	if ep == nil {
-		t.Skip("Skipping test: EzPlug client not initialized")
+	ep, b := newEzPlug(t)
+	topic := ep.Topic(testEzPlugID)
+
+	if err := ep.Toggle(topic); err != nil {
+		t.Fatalf("Toggle: %v", err)
 	}
-	d := time.Second * 5
-	// Turn "On".
-	if err := ep.On(testTopic); err != nil {
-		t.Error(err)
+
+	msgs := b.WaitForTopic(t, topic, 1, 5*time.Second)
+	if msgs[0].Payload != Toggle {
+		t.Errorf("payload = %q, want %q", msgs[0].Payload, Toggle)
 	}
-	time.Sleep(d)
-	// Toggle "Off"
-	if err := ep.Toggle(testTopic); err != nil {
-		t.Error(err)
+}
+
+// The original test drove on/off/on with five-second sleeps so a human could
+// watch the plug; this asserts the command sequence instead.
+func TestOnOffSequence(t *testing.T) {
+	ep, b := newEzPlug(t)
+	topic := ep.Topic(testEzPlugID)
+
+	for _, step := range []struct {
+		name string
+		fn   func(string) error
+	}{
+		{"On", ep.On},
+		{"Off", ep.Off},
+		{"Toggle", ep.Toggle},
+		{"On", ep.On},
+	} {
+		if err := step.fn(topic); err != nil {
+			t.Fatalf("%s: %v", step.name, err)
+		}
 	}
-	time.Sleep(d)
-	// Toggle "On"
-	if err := ep.Toggle(testTopic); err != nil {
-		t.Error(err)
+
+	b.WaitForTopic(t, topic, 4, 5*time.Second)
+	got := b.Payloads(topic)
+	want := []string{On, Off, Toggle, On}
+	if len(got) != len(want) {
+		t.Fatalf("payloads = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("payloads = %v, want %v", got, want)
+		}
+	}
+}
+
+// Commands are published at QoS 0 and unretained; a retained power command
+// would replay to any device that later subscribes.
+func TestCommandsAreUnretainedQoS0(t *testing.T) {
+	ep, b := newEzPlug(t)
+	topic := ep.Topic(testEzPlugID)
+
+	if err := ep.On(topic); err != nil {
+		t.Fatalf("On: %v", err)
+	}
+
+	msgs := b.WaitForTopic(t, topic, 1, 5*time.Second)
+	if msgs[0].QoS != 0 {
+		t.Errorf("qos = %d, want 0", msgs[0].QoS)
+	}
+	if msgs[0].Retained {
+		t.Error("retained = true, want false")
+	}
+}
+
+func TestPublishFailsWhenDisconnected(t *testing.T) {
+	b := mqtttest.New(t, mqtttest.WithCredentials(testUsername, testPassword))
+	c := iot.New(b.Addr(), testUsername, "wrong-password", testClientID, true)
+	// Connect is expected to fail, leaving the client unusable.
+	if _, err := c.Connect(); err == nil {
+		t.Fatal("Connect with wrong password: err = nil, want error")
+	}
+	ep := New(c)
+
+	if err := ep.On(ep.Topic(testEzPlugID)); err == nil {
+		t.Fatal("On with no connection: err = nil, want error")
 	}
 }

@@ -11,6 +11,7 @@ require (
 	github.com/fsouza/fake-gcs-server v1.56.1
 	github.com/gorilla/handlers v1.5.2
 	github.com/gregdel/pushover v1.4.0
+	github.com/mochi-mqtt/server/v2 v2.7.9
 	github.com/rs/cors v1.11.1
 	github.com/tdewolff/minify/v2 v2.24.17
 	go.uber.org/zap v1.28.0
@@ -51,6 +52,7 @@ require (
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/pkg/xattr v0.4.12 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
+	github.com/rs/xid v1.6.0 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.7.0 // indirect
 	github.com/tdewolff/parse/v2 v2.8.16 // indirect
 	go.opencensus.io v0.24.0 // indirect
