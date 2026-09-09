@@ -158,26 +158,47 @@ jobs:
             body: comment
           });
           
+  discover-modules:
+    name: Discover Modules
+    runs-on: ubuntu-latest
+
+    outputs:
+      modules: ${{ steps.list.outputs.modules }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+
+    - name: Setup Go
+      uses: actions/setup-go@v7
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: List packages that have tests
+      id: list
+      run: |
+        mod=$(go list -m)
+        modules=$(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./... \
+          | sed "s|^${mod}$|.|; s|^${mod}/|./|" \
+          | sort \
+          | jq -R -s -c 'split("\n") | map(select(length > 0))')
+        if [ "$modules" = "[]" ]; then
+          echo "::error::no packages with tests were found; the matrix would be empty"
+          exit 1
+        fi
+        echo "modules=$modules" >> "$GITHUB_OUTPUT"
+        echo "Discovered $(echo "$modules" | jq 'length') packages with tests:"
+        echo "$modules" | jq -r '.[] | "  " + .'
+
   test-modules:
     name: Test Individual Modules
+    needs: discover-modules
     runs-on: ubuntu-latest
-    
+
     strategy:
       matrix:
-        module:
-          - "."
-          - "./webhook"
-          - "./exp/logger"
-          - "./exp/config"
-          - "./exp/http/handlers"
-          - "./gravatar"
-          - "./shell"
-          - "./ssh"
-          - "./term"
-          - "./exp/http/tracer"
-          - "./exp/iot"
-          - "./exp/iot/ezplug"
-          - "./exp/iot/wled"
+        module: ${{ fromJSON(needs.discover-modules.outputs.modules) }}
       fail-fast: false
     
     steps:
@@ -193,13 +214,7 @@ jobs:
     - name: Test module ${{ matrix.module }}
       run: |
         echo "Testing module: ${{ matrix.module }}"
-        if [ -f "${{ matrix.module }}/go.mod" ]; then
-          cd "${{ matrix.module }}"
-          go mod verify
-          go test -v -race -timeout=30s ./...
-        else
-          go test -v -race -timeout=30s ${{ matrix.module }}
-        fi
+        go test -v -race -timeout=30s ${{ matrix.module }}
         
   benchmark:
     name: Benchmarks
