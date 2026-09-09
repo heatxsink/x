@@ -78,7 +78,9 @@ func TestConnectWrongCredentials(t *testing.T) {
 	}
 	// Stop the client before the broker is torn down: a lingering reconnect
 	// attempt accepted during shutdown trips a data race inside mochi-mqtt
-	// v2.7.9 (Server.Close closes s.done while Server.NewClient reads it).
+	// v2.7.9, where attachClient calls Listeners.ClientsWg.Add(1) while
+	// Server.Close is already waiting on that WaitGroup. See the note in
+	// ezplug's TestPublishFailsWhenDisconnected.
 	c.client.Disconnect(0)
 
 	if c.client.IsConnected() {
