@@ -141,8 +141,11 @@ func TestPublishFailsWhenDisconnected(t *testing.T) {
 	// No broker: port 1 on loopback refuses immediately. Deliberately not using
 	// an embedded broker here -- a client that never connects may retry in the
 	// background, and an accept racing the broker's shutdown trips a data race
-	// inside mochi-mqtt v2.7.9 (Server.Close closes s.done while
-	// Server.NewClient reads it).
+	// inside mochi-mqtt v2.7.9: attachClient runs Listeners.ClientsWg.Add(1)
+	// from the connection goroutine while Server.Close -> Listeners.CloseAll
+	// is already in ClientsWg.Wait(), which is the documented WaitGroup misuse
+	// (upstream mochi-mqtt/server#424, fixed on release/2.8.0 by moving
+	// registration into Listeners.Establish behind a shutdown flag).
 	c := iot.New("tcp://127.0.0.1:1", testUsername, testPassword, testClientID, true)
 	if _, err := c.Connect(); err == nil {
 		t.Fatal("Connect to unreachable broker: err = nil, want error")
