@@ -175,6 +175,9 @@ jobs:
           - "./ssh"
           - "./term"
           - "./exp/http/tracer"
+          - "./exp/iot"
+          - "./exp/iot/ezplug"
+          - "./exp/iot/wled"
       fail-fast: false
     
     steps:
