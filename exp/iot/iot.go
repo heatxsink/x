@@ -30,6 +30,12 @@ func (iot *IoT) Connect() (mqtt.Token, error) {
 	return token, nil
 }
 
+// Disconnect closes the connection to the broker, waiting up to quiesce
+// milliseconds for in-flight work to finish first.
+func (iot *IoT) Disconnect(quiesce uint) {
+	iot.client.Disconnect(quiesce)
+}
+
 func (iot *IoT) Publish(topic string, qos byte, retained bool, payload interface{}) error {
 	if token := iot.client.Publish(topic, qos, retained, payload); token.Wait() && token.Error() != nil {
 		return token.Error()
