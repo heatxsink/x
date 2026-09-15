@@ -216,6 +216,34 @@ jobs:
         echo "Testing module: ${{ matrix.module }}"
         go test -v -race -timeout=30s ${{ matrix.module }}
         
+  ci-gate:
+    name: CI Gate
+    # always() so the gate still runs when an upstream job fails or is skipped;
+    # without it the gate would itself be skipped and report no result, which
+    # branch protection treats as pending rather than failing.
+    if: always()
+    needs:
+      - test
+      - security
+      - build
+      - test-coverage-report
+      - discover-modules
+      - test-modules
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Verify every upstream job succeeded
+      run: |
+        results='${{ toJSON(needs) }}'
+        echo "Upstream job results:"
+        echo "$results" | jq -r 'to_entries[] | "  \(.key): \(.value.result)"'
+        notok=$(echo "$results" | jq -r '[to_entries[] | select(.value.result != "success") | .key] | join(", ")')
+        if [ -n "$notok" ]; then
+          echo "::error::did not succeed: $notok"
+          exit 1
+        fi
+        echo "All upstream jobs succeeded."
+
   benchmark:
     name: Benchmarks
     runs-on: ubuntu-latest
