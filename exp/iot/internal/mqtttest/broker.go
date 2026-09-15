@@ -77,17 +77,19 @@ func New(t TB, opts ...Option) *Broker {
 		o(&cfg)
 	}
 
-	// The listener binds inside Serve, so the port is reserved and released
-	// here to learn it up front.
+	// Bind here and hand the live listener to the broker via listeners.NewNet.
+	// Reserving a port and closing it so the broker can rebind leaves a window
+	// in which another process can take that port -- and under go test ./...
+	// the sibling iot packages run in parallel, each starting brokers of its
+	// own. Losing that race meant a client reaching a different package's
+	// broker, which accepted it because every broker here uses the same test
+	// credentials, and asserting against a broker that had recorded nothing.
 	var lc net.ListenConfig
 	l, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("mqtttest: reserve port: %v", err)
+		t.Fatalf("mqtttest: listen: %v", err)
 	}
 	addr := l.Addr().String()
-	if err := l.Close(); err != nil {
-		t.Fatalf("mqtttest: release port: %v", err)
-	}
 
 	// The default logger writes broker chatter to stdout at info level.
 	srv := mqtt.New(&mqtt.Options{
@@ -95,19 +97,42 @@ func New(t TB, opts ...Option) *Broker {
 	})
 	rec := &recorder{allow: cfg.creds}
 	if err := srv.AddHook(rec, nil); err != nil {
+		_ = l.Close()
 		t.Fatalf("mqtttest: add hook: %v", err)
 	}
-	if err := srv.AddListener(listeners.NewTCP(listeners.Config{
-		ID:      "mqtttest",
-		Address: addr,
-	})); err != nil {
+	// NewNet serves the listener it is given; Init does not bind anything, so
+	// the socket above is the one clients reach.
+	if err := srv.AddListener(listeners.NewNet("mqtttest", l)); err != nil {
+		_ = l.Close()
 		t.Fatalf("mqtttest: add listener: %v", err)
 	}
 
-	go func() { _ = srv.Serve() }()
-	t.Cleanup(func() { _ = srv.Close() })
+	// Serve starts the accept loops and returns; it does not block. Calling it
+	// synchronously means a startup failure fails the test instead of being
+	// discarded in a goroutine.
+	if err := srv.Serve(); err != nil {
+		_ = l.Close()
+		t.Fatalf("mqtttest: serve: %v", err)
+	}
+	t.Cleanup(func() {
+		// Let the broker finish removing disconnected clients before closing.
+		// Server.Close -> Clients.GetByListener takes a read lock and then
+		// calls Clients.Len, which takes the same read lock; a Clients.Delete
+		// still in flight for a just-disconnected client is the pending writer
+		// that wedges the second acquisition permanently (upstream
+		// mochi-mqtt/server#488, fixed on release/2.8.0). paho's Disconnect
+		// returns before the broker has done that removal, so waiting on the
+		// client side alone is not enough.
+		deadline := time.Now().Add(5 * time.Second)
+		for srv.Clients.Len() > 0 && time.Now().Before(deadline) {
+			time.Sleep(2 * time.Millisecond)
+		}
+		_ = srv.Close()
+	})
 
-	waitListening(t, addr)
+	// No readiness wait is needed: the socket is listening from the moment
+	// net.Listen returns, so a connection arriving before the accept loop runs
+	// simply waits in the backlog.
 	return &Broker{addr: "tcp://" + addr, rec: rec}
 }
 
@@ -176,28 +201,6 @@ func (b *Broker) WaitForTopic(t TB, topic string, n int, timeout time.Duration) 
 			t.Fatalf("mqtttest: timed out after %s waiting for %d messages on %q, saw %d: %+v",
 				timeout, n, topic, len(msgs), msgs)
 			return msgs
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
-}
-
-func waitListening(t TB, addr string) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	var d net.Dialer
-	for {
-		dialCtx, dialCancel := context.WithTimeout(ctx, 250*time.Millisecond)
-		conn, err := d.DialContext(dialCtx, "tcp", addr)
-		dialCancel()
-		if err == nil {
-			_ = conn.Close()
-			return
-		}
-		if ctx.Err() != nil {
-			t.Fatalf("mqtttest: broker never started listening on %s: %v", addr, err)
-			return
 		}
 		time.Sleep(2 * time.Millisecond)
 	}

@@ -22,6 +22,9 @@ func connected(t *testing.T, b *mqtttest.Broker, clientID string) *IoT {
 	if _, err := c.Connect(); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
+	// See the note in ezplug's newEzPlug: the client must be gone before the
+	// broker closes, or Server.Close can deadlock in mochi-mqtt v2.7.9.
+	t.Cleanup(func() { c.Disconnect(250) })
 	return c
 }
 

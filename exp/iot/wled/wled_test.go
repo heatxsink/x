@@ -28,6 +28,14 @@ func newWLed(t *testing.T) (*WLed, *mqtttest.Broker) {
 	if _, err := c.Connect(); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
+	// Registered after the broker's own cleanup, so it runs before it
+	// (cleanups are LIFO). Closing a broker while a client is still connected
+	// races Server.Close against the client's disconnect, which deadlocks in
+	// mochi-mqtt v2.7.9: Clients.GetByListener holds a read lock and calls
+	// Clients.Len, which takes the same read lock, and a pending writer wedges
+	// the second acquisition (upstream mochi-mqtt/server#488, fixed on
+	// release/2.8.0).
+	t.Cleanup(func() { c.Disconnect(250) })
 	return New(c), b
 }
 
