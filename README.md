@@ -47,11 +47,6 @@ err := dotenv.Overload(".env.local")
 envMap, err := dotenv.Read(".env")
 ```
 
-### `gcs/` - Google Cloud Storage (deprecated)
-Thin wrapper around `cloud.google.com/go/storage` for bucket and object operations.
-
-**Deprecated** in favor of `exp/storage` with `gs://bucket/key` URIs. The new package pools the GCS client across calls and lets callers swap to local filesystem or in-memory backends without changing call sites. See the Deprecations section below.
-
 ### `gravatar/` - Gravatar Integration
 Full Gravatar URL API client with functional options pattern. Supports avatar images, profile URLs (JSON/XML/VCF), and QR codes.
 
@@ -346,13 +341,22 @@ Enhanced path manipulation utilities using the `xdg` module for platform-appropr
 ### `pushover/` - Push Notifications
 Pushover notification service integration for sending push notifications to mobile devices.
 
+## Removals
+
+The `gcs` package was removed. It carried `Deprecated:` markers from v0.3.1
+onward, was last present in v0.4.5, and had no callers left in this module. Use `exp/storage` with `gs://bucket/key` URIs
+instead: `storage.Get`, `storage.PutFile`, `storage.PutBytes`, `storage.Delete`
+and `storage.List` replace the five functions it exported. `List` returns a
+backend-neutral `[]storage.Object` rather than `[]*storage.ObjectAttrs`, so a
+caller reading `ObjectAttrs` fields directly is the one case needing more than
+a call-site swap.
+
 ## Deprecations
 
 The following APIs are deprecated. Each continues to work; callers should migrate to the replacement.
 
 | Deprecated | Replacement | Why |
 |---|---|---|
-| `gcs` package (entire package: `Get`, `PutFile`, `PutBytes`, `Delete`, `List`) | `exp/storage` with `gs://bucket/key` URIs | URI-based dispatch, GCS client reuse, backend-neutral `List` (no `cloud.google.com/go/storage` types leak through the API) |
 | `dotenv.Exec` | `dotenv.ExecContext` | Lets the caller cancel or set a deadline on the spawned process |
 | `shell.Execute` | `shell.ExecuteContext` | Context-aware execution |
 | `shell.ExecuteWith` | `shell.ExecuteWithContext` | Context-aware execution |
