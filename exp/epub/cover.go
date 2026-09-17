@@ -6,9 +6,15 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
-	_ "image/png"
 	"io"
 	"os"
+
+	// Decoders registered for image.Decode. Covers in the wild are JPEG or
+	// PNG almost always, but GIF and WebP show up often enough to matter.
+	_ "image/gif"
+	_ "image/png"
+
+	_ "golang.org/x/image/webp"
 )
 
 // ExtractCover extracts the cover image from an EPUB and writes it as a JPEG
@@ -33,16 +39,10 @@ func ExtractCover(epubPath string, destPath string, quality int) error {
 
 	coverPath := findCoverImagePath(zr, containerPath)
 	if coverPath == "" {
-		return fmt.Errorf("no cover image found")
+		return fmt.Errorf("no cover image referenced by OPF manifest, metadata, or guide")
 	}
 
-	var coverFile *zip.File
-	for _, f := range zr.File {
-		if f.Name == coverPath {
-			coverFile = f
-			break
-		}
-	}
+	coverFile := findZipFile(zr, coverPath)
 	if coverFile == nil {
 		return fmt.Errorf("cover file not found in archive: %s", coverPath)
 	}
@@ -55,7 +55,7 @@ func ExtractCover(epubPath string, destPath string, quality int) error {
 
 	img, _, err := image.Decode(rc)
 	if err != nil {
-		return fmt.Errorf("decode cover image: %w", err)
+		return fmt.Errorf("decode cover image %s: %w", coverPath, err)
 	}
 
 	out, err := os.Create(destPath) // #nosec G304 -- destPath is caller-controlled, not user input
