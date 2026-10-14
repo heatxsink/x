@@ -13,7 +13,7 @@ require (
 	github.com/gregdel/pushover v1.4.0
 	github.com/mochi-mqtt/server/v2 v2.7.9
 	github.com/rs/cors v1.11.1
-	github.com/tdewolff/minify/v2 v2.24.17
+	github.com/tdewolff/minify/v2 v2.24.19
 	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/image v0.46.0
