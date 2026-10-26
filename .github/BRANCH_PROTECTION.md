@@ -28,7 +28,7 @@ Three fixed names, one per workflow:
 | `golangci-lint` | `lint.yml` | — |
 
 Only fixed names belong here. Most checks in this repo are generated —
-`Run Tests (1.26.6)` carries the Go version, `Build (linux, amd64)` the
+`Run Tests (1.26.x)` carries the Go version, `Build (linux, amd64)` the
 platform, and the `Test Individual Modules (...)` legs come from `go list`, so
 their number changes whenever a package is added or removed. Requiring a
 generated name leaves a required check that stops reporting the moment the name
