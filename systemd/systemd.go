@@ -1,17 +1,26 @@
 package systemd
 
 import (
-	"html/template"
 	"os"
+	"text/template"
 )
 
-// serviceTemplate emits a single systemd unit file. The User= line
-// is conditional so user units (which run as the invoking user by
-// definition) can omit it cleanly.
+// serviceTemplate emits a single systemd unit file. It is rendered with
+// text/template: html/template would entity-escape characters such as
+// " & < + in ExecStart and corrupt the unit. Dependency and User= lines are
+// emitted only when set, since an empty assignment resets the list in
+// systemd rather than meaning "unset".
 var serviceTemplate = `[Unit]
 Description={{ .Name }}
+{{- if .Wants }}
+Wants={{ .Wants }}
+{{- end }}
+{{- if .After }}
 After={{ .After }}
+{{- end }}
+{{- if .Requires }}
 Requires={{ .Requires }}
+{{- end }}
 
 [Service]
 {{- if .User }}
@@ -39,6 +48,7 @@ WantedBy={{ .WantedBy }}
 // like "kiosk" -- start from NewService and overwrite .User).
 type Service struct {
 	Name            string
+	Wants           string // weak dependency; pair "network-online.target" with After= to actually wait for the network
 	After           string
 	Requires        string
 	User            string // empty => omit User= line (user services)

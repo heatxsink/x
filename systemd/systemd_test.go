@@ -368,3 +368,44 @@ func TestServiceToFileMultipleServices(t *testing.T) {
 		}
 	}
 }
+
+func renderUnit(t *testing.T, s *Service) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "unit.service")
+	if err := s.ToFile(path); err != nil {
+		t.Fatalf("ToFile: %v", err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	return string(body)
+}
+
+func TestServiceToFileDoesNotEscapeExecStart(t *testing.T) {
+	execStart := `/usr/bin/app --url=http://x/?a=1&b=2 --expr="a<b" --tz=+0100 --name='x'`
+	got := renderUnit(t, NewService("svc", execStart))
+	if !strings.Contains(got, "ExecStart="+execStart+"\n") {
+		t.Errorf("ExecStart was altered; got:\n%s", got)
+	}
+}
+
+func TestServiceToFileOmitsEmptyDependencies(t *testing.T) {
+	got := renderUnit(t, NewService("svc", "/bin/svc"))
+	for _, key := range []string{"Wants=", "After=", "Requires="} {
+		if strings.Contains(got, key) {
+			t.Errorf("empty %s should be omitted; got:\n%s", key, got)
+		}
+	}
+}
+
+func TestServiceToFileWants(t *testing.T) {
+	s := NewService("svc", "/bin/svc")
+	s.Wants = "network-online.target"
+	s.After = "network-online.target"
+	got := renderUnit(t, s)
+	want := "[Unit]\nDescription=svc\nWants=network-online.target\nAfter=network-online.target\n\n[Service]\n"
+	if !strings.HasPrefix(got, want) {
+		t.Errorf("unexpected [Unit] section; got:\n%s", got)
+	}
+}
