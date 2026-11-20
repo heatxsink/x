@@ -190,22 +190,24 @@ func (w *WLed) PulseN(topic string, pulse int) error {
 	return nil
 }
 
+// infoClient is shared across Info calls so keep-alive connections are reused.
+var infoClient = &http.Client{Timeout: 20 * time.Second}
+
 func Info(ctx context.Context, hostname string) (*LightInfo, error) {
 	url := fmt.Sprintf("http://%s/json/si", hostname)
 	request, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	client := http.Client{}
-	client.Timeout = time.Second * 20
-	response, err := client.Do(request)
+	response, err := infoClient.Do(request)
 	if err != nil {
 		return nil, err
 	}
-	if response.StatusCode != 200 {
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, response.Body)
 		return nil, fmt.Errorf("HTTP status code: %d", response.StatusCode)
 	}
-	defer response.Body.Close()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, err

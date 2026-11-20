@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -533,5 +534,28 @@ func TestSendWithContextAndRetry_ExhaustsRetries(t *testing.T) {
 		if !strings.Contains(e.Error(), "HTTP status code: 500") {
 			t.Errorf("joined[%d] = %v, want 500 status", i, e)
 		}
+	}
+}
+
+func TestSendJSONReusesConnection(t *testing.T) {
+	var conns atomic.Int64
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	server.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		if s == http.StateNew {
+			conns.Add(1)
+		}
+	}
+	server.Start()
+	defer server.Close()
+
+	for i := range 10 {
+		if err := SendJSON(server.URL, testPayload{Message: "reuse", ID: i}); err != nil {
+			t.Fatalf("SendJSON #%d: %v", i, err)
+		}
+	}
+	if got := conns.Load(); got != 1 {
+		t.Fatalf("sequential SendJSON calls dialed %d connections, want 1", got)
 	}
 }

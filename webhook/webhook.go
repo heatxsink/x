@@ -13,8 +13,12 @@ import (
 	"github.com/heatxsink/x/exp/http/clients"
 )
 
+// defaultClient is shared by SendJSON. Building a client per call would give
+// every request its own transport and connection pool, so nothing is reused.
+var defaultClient = clients.Default()
+
 func SendJSON(url string, data interface{}) error {
-	return SendJSONWithClient(clients.Default(), url, data)
+	return SendJSONWithClient(defaultClient, url, data)
 }
 
 func SendJSONWithClient(client *http.Client, url string, data interface{}) error {
